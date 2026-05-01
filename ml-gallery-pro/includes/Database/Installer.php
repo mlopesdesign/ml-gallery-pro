@@ -41,11 +41,13 @@ final class Installer {
 			display_type VARCHAR(50) NOT NULL DEFAULT 'grid',
 			settings_json LONGTEXT NULL,
 			created_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			published_at DATETIME NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY slug (slug),
 			KEY status (status),
+			KEY published_at (published_at),
 			KEY updated_at (updated_at)
 		) {$charset_collate};";
 
@@ -60,11 +62,13 @@ final class Installer {
 			display_type VARCHAR(50) NOT NULL DEFAULT 'grid',
 			settings_json LONGTEXT NULL,
 			created_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			published_at DATETIME NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY slug (slug),
 			KEY status (status),
+			KEY published_at (published_at),
 			KEY updated_at (updated_at)
 		) {$charset_collate};";
 

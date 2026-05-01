@@ -128,6 +128,7 @@ if (root || config.isPostEditor) {
 		validation: config.validation || null,
 		license: config.license || null,
 		gallerySearchQuery: "",
+		galleryAlbumFilter: "",
 		settingsUi: {
 			tab: "general",
 		},
@@ -1013,7 +1014,7 @@ if (root || config.isPostEditor) {
 	}
 
 	function renderGalleryRow(item) {
-		const managerUrl = `${String((config.pageUrls && config.pageUrls.galleries) || "#")}&gallery_id=${Number(item.id || 0)}`;
+			const managerUrl = `${String((config.pageUrls && config.pageUrls.galleries) || "#")}&gallery_id=${Number(item.id || 0)}`;
 		const cover = item.cover && item.cover.thumb_url
 			? `<div class="mlgp-gallery-admin-row__thumb"><img src="${escapeHtml(item.cover.thumb_url)}" alt="${escapeHtml(item.title || "")}"></div>`
 			: `<div class="mlgp-gallery-admin-row__thumb is-empty">GAL</div>`;
@@ -1032,6 +1033,7 @@ if (root || config.isPostEditor) {
 						<span class="mlgp-pill">${escapeHtml(statusLabel)}</span>
 						<span>slug: ${escapeHtml(item.slug)}</span>
 						<span>${item.item_count || 0} imagens</span>
+						<span>${item.published_at ? "Pub: " + escapeHtml(item.published_at.substring(0, 10)) : ""}</span>
 						<span class="mlgp-gallery-admin-row__shortcode">${escapeHtml(item.shortcode || "")}</span>
 					</div>
 				</div>
@@ -1045,7 +1047,30 @@ if (root || config.isPostEditor) {
 
 	function renderGalleries() {
 		const gallerySearchQuery = String(state.gallerySearchQuery || "").trim().toLowerCase();
+		const albumFilter = String(state.galleryAlbumFilter || "");
+
+		// Persist filter state so it survives page navigation.
+		try {
+			sessionStorage.setItem("mlgp_gallery_state", JSON.stringify({
+				search: state.gallerySearchQuery || "",
+				album: state.galleryAlbumFilter || "",
+				sort: (state.sorting && state.sorting.galleries) || "",
+			}));
+		} catch (e) { /* */ }
 		const filteredGalleries = (state.galleries || []).filter((item) => {
+			// Album filter.
+			if (albumFilter === "none") {
+				if ((item.album_ids || []).length > 0) {
+					return false;
+				}
+			} else if (albumFilter && albumFilter !== "") {
+				const albumId = Number(albumFilter);
+				if (!(item.album_ids || []).includes(albumId)) {
+					return false;
+				}
+			}
+
+			// Search filter.
 			if (!gallerySearchQuery) {
 				return true;
 			}
@@ -1114,6 +1139,13 @@ if (root || config.isPostEditor) {
 							<span>${totalImages} imagens</span>
 						</div>
 						<div class="mlgp-gallery-admin-toolbar__tools">
+							<div class="mlgp-sort-control">
+								<select data-mlgp-album-filter="1">
+									<option value=""${albumFilter === "" ? " selected" : ""}>Todos os albuns</option>
+									<option value="none"${albumFilter === "none" ? " selected" : ""}>Sem album</option>
+									${(config.albumList || []).map((a) => `<option value="${a.id}"${albumFilter === String(a.id) ? " selected" : ""}>${escapeHtml(a.title || ("Album #" + a.id))}</option>`).join("")}
+								</select>
+							</div>
 							${renderSortControl("gallery", state.sorting.galleries)}
 							<div class="mlgp-gallery-search">
 								<input type="search" value="${escapeHtml(state.gallerySearchQuery || "")}" placeholder="Buscar galerias..." data-mlgp-gallery-search="1">
@@ -1555,6 +1587,9 @@ if (root || config.isPostEditor) {
 		const allSelected = state.albums.length > 0 && selectedCount === state.albums.length;
 		const activeAlbum = state.albumEditor.album || null;
 
+		// Store last filtered for partial updates.
+		state._lastFilteredAlbums = filteredAlbums;
+
 		// Ensure root is valid for Post Editor context
 		if (config.isPostEditor && (!root || !document.getElementById(root.id))) {
 			root = document.getElementById("mlgp-editor-picker-root") || document.createElement("div");
@@ -1629,7 +1664,7 @@ if (root || config.isPostEditor) {
 						</div>
 					</div>
 				</div>
-				<div class="mlgp-linked-list mlgp-linked-list--albums">
+				<div id="mlgp-album-list-container" class="mlgp-linked-list mlgp-linked-list--albums">
 					${filteredAlbums.length ? filteredAlbums.map((item) => renderAlbumRow(item)).join("") : '<div class="mlgp-empty">Nenhum album encontrado para esta busca.</div>'}
 				</div>
 			</section>
@@ -1648,6 +1683,38 @@ if (root || config.isPostEditor) {
 
 		updateAlbumDirtyUi();
 	}
+
+	function renderAlbumListOnly() {
+		const container = document.getElementById("mlgp-album-list-container");
+		if (!container) {
+			return;
+		}
+
+		const albumSearchQuery = String(state.albumSearchQuery || "").trim().toLowerCase();
+		const filteredAlbums = (state.albums || []).filter((item) => {
+			if (!albumSearchQuery) {
+				return true;
+			}
+			const haystack = [
+				item.title || "",
+				item.slug || "",
+				item.shortcode || "",
+			].join(" ").toLowerCase();
+			return haystack.includes(albumSearchQuery);
+		});
+
+		container.innerHTML = filteredAlbums.length
+			? filteredAlbums.map((item) => renderAlbumRow(item)).join("")
+			: '<div class="mlgp-empty">Nenhum album encontrado para esta busca.</div>';
+
+		// Update meta counts without touching the search input.
+		const metaEl = root.querySelector(".mlgp-list__meta");
+		if (metaEl) {
+			metaEl.innerHTML = `<span>${filteredAlbums.length} de ${(state.albums || []).length} albuns</span><span>${(state.albums || []).reduce((c, i) => c + Number(i.item_count || 0), 0)} itens vinculados</span>`;
+		}
+	}
+
+	let albumSearchTimer = null;
 
 	function renderSettingsSection(title, intro, content) {
 		return `
@@ -1696,17 +1763,6 @@ if (root || config.isPostEditor) {
 							<option value="impact-mosaic" ${String(settings.default_gallery_preset || "masonry-default") === "impact-mosaic" ? "selected" : ""}>Impact Mosaic</option>
 							<option value="story-justified" ${String(settings.default_gallery_preset || "masonry-default") === "story-justified" ? "selected" : ""}>Story Justified</option>
 							<option value="showcase-filmstrip" ${String(settings.default_gallery_preset || "masonry-default") === "showcase-filmstrip" ? "selected" : ""}>Showcase Filmstrip</option>
-						</select>
-					</div>
-					<div class="mlgp-field">
-						<label for="mlgp-default-album-display-type">Layout padrão dos prints de álbum</label>
-						<select id="mlgp-default-album-display-type" name="default_album_display_type">
-							<option value="grid" ${String(settings.default_album_display_type || "grid") === "grid" ? "selected" : ""}>Grid</option>
-							<option value="grid_plus" ${String(settings.default_album_display_type || "grid") === "grid_plus" ? "selected" : ""}>Grid Plus</option>
-							<option value="masonry" ${String(settings.default_album_display_type || "grid") === "masonry" ? "selected" : ""}>Masonry</option>
-							<option value="mosaic" ${String(settings.default_album_display_type || "grid") === "mosaic" ? "selected" : ""}>Mosaico</option>
-							<option value="tile" ${String(settings.default_album_display_type || "grid") === "tile" ? "selected" : ""}>Tile</option>
-							<option value="justified" ${String(settings.default_album_display_type || "grid") === "justified" ? "selected" : ""}>Justified</option>
 						</select>
 					</div>
 
@@ -2410,7 +2466,8 @@ if (root || config.isPostEditor) {
 					</div>
 					<div class="mlgp-actions mlgp-settings-actions">
 						<button type="submit" class="mlgp-button mlgp-button--accent">Salvar configurações</button>
-						<button type="button" class="mlgp-button mlgp-button--ghost" data-mlgp-apply-settings-all="1">${activeTab === "albums" ? "Aplicar esta configuração a todos os álbuns" : "Aplicar esta configuração a todos os álbuns"}</button>
+						${activeTab !== "albums" ? '<button type="button" class="mlgp-button mlgp-button--ghost" data-mlgp-apply-galleries-all="1">Aplicar configuração a todas as galerias</button>' : ""}
+						${activeTab === "albums" ? '<button type="button" class="mlgp-button mlgp-button--ghost" data-mlgp-apply-albums-all="1">Aplicar configuração a todos os álbuns</button>' : ""}
 					</div>
 				</form>
 			</section>
@@ -2758,7 +2815,6 @@ if (root || config.isPostEditor) {
 		}
 
 		state.albumEditor.items = [
-			...(state.albumEditor.items || []),
 			{
 				id: 0,
 				item_type: itemType,
@@ -2770,6 +2826,7 @@ if (root || config.isPostEditor) {
 				shortcode: source.shortcode || "",
 				cover: source.cover || null,
 			},
+			...(state.albumEditor.items || []),
 		];
 		markAlbumItemsDirty();
 
@@ -3001,22 +3058,26 @@ if (root || config.isPostEditor) {
 
 			if (state.page === "galleries") {
 				await loadGalleries(false);
+				await loadAlbums(false);
 
-				if (Number(config.activeGalleryId || 0)) {
-					await openGalleryEditor(config.activeGalleryId);
-					return;
+				if (!Number(config.activeGalleryId || 0)) {
+					// Restore saved filter state.
+					try {
+						const saved = sessionStorage.getItem("mlgp_gallery_state");
+						if (saved) {
+							const s = JSON.parse(saved);
+							if (s.search) state.gallerySearchQuery = s.search;
+							if (s.album) state.galleryAlbumFilter = s.album;
+							if (s.sort && state.sorting) state.sorting.galleries = s.sort;
+						}
+					} catch (e) { /* */ }
+					renderGalleries();
 				}
-
-				renderGalleries();
 				return;
 			}
 
 			if (state.page === "add-images" || state.page === "addImages") {
 				await loadGalleries(false);
-				
-				if (state.galleries && state.galleries.length > 0 && Number(config.activeGalleryId || 0)) {
-					await openGalleryEditor(config.activeGalleryId);
-				}
 				return;
 			}
 
@@ -3061,6 +3122,12 @@ if (root || config.isPostEditor) {
 			clearAlbumSelection();
 			await loadAlbums(false);
 			renderAlbums();
+			return;
+		}
+
+		if (target.dataset.mlgpAlbumFilter !== undefined) {
+			state.galleryAlbumFilter = target.value || "";
+			renderGalleries();
 			return;
 		}
 
@@ -3161,7 +3228,10 @@ if (root || config.isPostEditor) {
 
 		if (target.dataset.mlgpAlbumSearch) {
 			state.albumSearchQuery = target.value || "";
-			renderAlbums();
+			clearTimeout(albumSearchTimer);
+			albumSearchTimer = setTimeout(() => {
+				renderAlbumListOnly();
+			}, 350);
 			return;
 		}
 
@@ -3272,7 +3342,7 @@ if (root || config.isPostEditor) {
 			return;
 		}
 
-		const target = event.target.closest("[data-mlgp-trigger-picker],[data-edit-gallery],[data-delete-gallery],[data-reset-gallery],[data-manage-album],[data-delete-album],[data-reset-album],[data-mlgp-open-album-picker],[data-mlgp-close-album-picker],[data-mlgp-add-item-flow],[data-mlgp-batch-add-picker],[data-mlgp-move-album-item],[data-mlgp-remove-album-item],[data-mlgp-save-album-all],[data-mlgp-copy-shortcode],[data-mlgp-regenerate-all],[data-mlgp-media-pick],[data-mlgp-media-clear],[data-mlgp-settings-tab],[data-mlgp-refresh-validation],[data-mlgp-validate-license],[data-mlgp-deactivate-license],[data-mlgp-delete-selected-galleries],[data-mlgp-delete-all-galleries],[data-mlgp-delete-all-images],[data-mlgp-delete-selected-albums],[data-mlgp-factory-reset],[data-mlgp-apply-settings-all]");
+		const target = event.target.closest("[data-mlgp-trigger-picker],[data-edit-gallery],[data-delete-gallery],[data-reset-gallery],[data-manage-album],[data-delete-album],[data-reset-album],[data-mlgp-open-album-picker],[data-mlgp-close-album-picker],[data-mlgp-add-item-flow],[data-mlgp-batch-add-picker],[data-mlgp-move-album-item],[data-mlgp-remove-album-item],[data-mlgp-save-album-all],[data-mlgp-copy-shortcode],[data-mlgp-regenerate-all],[data-mlgp-media-pick],[data-mlgp-media-clear],[data-mlgp-settings-tab],[data-mlgp-refresh-validation],[data-mlgp-validate-license],[data-mlgp-deactivate-license],[data-mlgp-delete-selected-galleries],[data-mlgp-delete-all-galleries],[data-mlgp-delete-all-images],[data-mlgp-delete-selected-albums],[data-mlgp-factory-reset],[data-mlgp-apply-galleries-all],[data-mlgp-apply-albums-all]");
 
 		if (!target) {
 			return;
@@ -3303,21 +3373,37 @@ if (root || config.isPostEditor) {
 			return;
 		}
 
-		if (target.dataset.mlgpApplySettingsAll) {
+		if (target.dataset.mlgpApplyGalleriesAll) {
 			const form = root.querySelector("#mlgp-settings-form");
 			if (!(form instanceof HTMLFormElement)) {
 				return;
 			}
-			const isAlbumTab = String(state.settingsUi.tab || "general") === "albums";
-			const action = isAlbumTab ? "mlgp_apply_settings_to_all_albums" : "mlgp_apply_settings_to_all_galleries";
-			const entityLabel = isAlbumTab ? "álbuns" : "galerias";
 			try {
 				rememberSettingsFormValues(form);
-				const response = await request(action, state.settingsDraft || collectFormValues(form));
+				const response = await request("mlgp_apply_settings_to_all_galleries", state.settingsDraft || collectFormValues(form));
 				state.settings = response.settings || {};
 				state.settingsDraft = { ...(response.settings || {}) };
 				state.validation = response.validation || state.validation;
-				showNotice(response.message || `Configuração aplicada a ${Number(response.updated || 0)} ${entityLabel}.`);
+				showNotice(response.message || `Configuração aplicada a ${Number(response.updated || 0)} galerias.`);
+				renderSettings();
+			} catch (error) {
+				showNotice(error.message || config.strings.genericError, "error");
+			}
+			return;
+		}
+
+		if (target.dataset.mlgpApplyAlbumsAll) {
+			const form = root.querySelector("#mlgp-settings-form");
+			if (!(form instanceof HTMLFormElement)) {
+				return;
+			}
+			try {
+				rememberSettingsFormValues(form);
+				const response = await request("mlgp_apply_settings_to_all_albums", state.settingsDraft || collectFormValues(form));
+				state.settings = response.settings || {};
+				state.settingsDraft = { ...(response.settings || {}) };
+				state.validation = response.validation || state.validation;
+				showNotice(response.message || `Configuração aplicada a ${Number(response.updated || 0)} álbuns.`);
 				renderSettings();
 			} catch (error) {
 				showNotice(error.message || config.strings.genericError, "error");

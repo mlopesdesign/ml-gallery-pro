@@ -631,7 +631,7 @@ final class Shortcodes {
 					<div class="mlgp-album-hero__mosaic">
 						<?php foreach ( $preview_tiles as $index => $cover ) : ?>
 							<div class="mlgp-album-hero__tile mlgp-album-hero__tile--<?php echo esc_attr( (string) ( $index + 1 ) ); ?>">
-								<?php echo $this->render_media_image( $cover, [], $settings, 'medium' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+								<?php echo $this->render_media_image( $cover, [], $settings, 'large' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 							</div>
 						<?php endforeach; ?>
 					</div>
@@ -1573,7 +1573,7 @@ final class Shortcodes {
 								<?php foreach ( $items as $index => $item ) : ?>
 									<?php
 									$media     = isset( $item['attachment'] ) && is_array( $item['attachment'] ) ? $item['attachment'] : [];
-									$thumb_url = ! empty( $media['thumb_url'] ) ? (string) $media['thumb_url'] : (string) ( $media['medium_url'] ?? '' );
+									$thumb_url = ! empty( $media['thumb_url'] ) ? (string) $media['thumb_url'] : (string) ( ! empty( $media['large_url'] ) ? $media['large_url'] : ( $media['medium_url'] ?? '' ) );
 									$thumb_alt = (string) ( $item['item_alt'] ?? $media['alt'] ?? $media['title'] ?? '' );
 									?>
 									<button type="button" class="mlgp-slideshow__thumb <?php echo 0 === $index ? 'is-active' : ''; ?>" data-mlgp-slide-thumb="<?php echo esc_attr( (string) $index ); ?>" aria-label="<?php echo esc_attr( sprintf( 'Ir para slide %d', $index + 1 ) ); ?>">
@@ -1638,7 +1638,7 @@ final class Shortcodes {
 								<?php foreach ( $items as $index => $item ) : ?>
 									<?php
 									$media     = isset( $item['attachment'] ) && is_array( $item['attachment'] ) ? $item['attachment'] : [];
-									$thumb_url = ! empty( $media['thumb_url'] ) ? (string) $media['thumb_url'] : (string) ( $media['medium_url'] ?? '' );
+									$thumb_url = ! empty( $media['thumb_url'] ) ? (string) $media['thumb_url'] : (string) ( ! empty( $media['large_url'] ) ? $media['large_url'] : ( $media['medium_url'] ?? '' ) );
 									$thumb_alt = (string) ( $item['item_alt'] ?? $media['alt'] ?? $media['title'] ?? '' );
 									?>
 									<button type="button" class="mlgp-slideshow__thumb <?php echo 0 === $index ? 'is-active' : ''; ?>" data-mlgp-slide-thumb="<?php echo esc_attr( (string) $index ); ?>" aria-label="<?php echo esc_attr( sprintf( 'Ir para slide %d', $index + 1 ) ); ?>">
@@ -1689,7 +1689,7 @@ final class Shortcodes {
 					<?php foreach ( $items as $index => $item ) : ?>
 						<?php
 						$media     = isset( $item['attachment'] ) && is_array( $item['attachment'] ) ? $item['attachment'] : [];
-						$thumb_url = ! empty( $media['thumb_url'] ) ? (string) $media['thumb_url'] : (string) ( $media['medium_url'] ?? '' );
+						$thumb_url = ! empty( $media['thumb_url'] ) ? (string) $media['thumb_url'] : (string) ( ! empty( $media['large_url'] ) ? $media['large_url'] : ( $media['medium_url'] ?? '' ) );
 						?>
 						<button type="button" class="mlgp-imagebrowser__thumb <?php echo 0 === $index ? 'is-active' : ''; ?>" data-mlgp-browser-thumb="<?php echo esc_attr( (string) $index ); ?>">
 							<?php if ( $thumb_url ) : ?>

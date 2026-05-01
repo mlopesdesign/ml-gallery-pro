@@ -1,9 +1,11 @@
 *.zip
 _baseline_*
 _work_*
+_zip_*
 extracted/
 final_staging/
 inspect_original/
 scratch/
 zip_audit/
+v30_clean/
 Auditoria Completa_ ML Gallery Pro (v0.23.17)

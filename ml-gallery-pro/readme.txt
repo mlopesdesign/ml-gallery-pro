@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.23.21
+Stable tag: 0.26.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,8 +49,14 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+= 0.23.25 =
+* Blinda o hook mlgp_after_items_stored contra saida indevida para preservar JSON no AJAX de importacao em lote.
 
-= 0.23.21 =
+= 0.23.24 =
+* Corrige importacao de pasta do servidor com JSON seguro, lotes menores, log de erro real e preservacao do hook mlgp_after_items_stored por lote.
+
+
+= 0.23.22 =
 * ajusta a toolbar de galerias para manter contadores, ordenacao, busca e botao na mesma linha no desktop
 * reduz o titulo administrativo e troca as thumbs da lista para formato horizontal com alinhamento refinado
 * preserva o acesso ao editor completo e o restante das correcoes administrativas sem tocar no frontend

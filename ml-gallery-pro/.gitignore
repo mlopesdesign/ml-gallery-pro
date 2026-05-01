@@ -1,0 +1,34 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDEs
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Node / build tools (not used yet, but safe to ignore)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Composer
+vendor/
+composer.lock
+
+# WordPress dev
+wp-config.php
+wp-content/uploads/
+wp-content/debug.log
+
+# Release artifacts (ZIPs are built, not committed)
+*.zip
+
+# Logs
+*.log
+error_log

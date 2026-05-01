@@ -40,6 +40,15 @@ final class Repository {
 	}
 
 	/**
+	 * Returns the Storage instance.
+	 *
+	 * @return Storage
+	 */
+	public function get_storage(): Storage {
+		return $this->storage;
+	}
+
+	/**
 	 * Returns a single table name.
 	 *
 	 * @param string $key Table key.
@@ -150,8 +159,23 @@ final class Repository {
 		$results = $wpdb->get_results( $sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$items   = $this->normalize_collection( $results );
 
+		// Batch-load album memberships for all galleries in one query.
+		$album_map = [];
+		$album_rows = $wpdb->get_results(
+			"SELECT album_id, item_id FROM {$this->table('album_items')} WHERE item_type = 'gallery'",
+			ARRAY_A
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+
+		if ( is_array( $album_rows ) ) {
+			foreach ( $album_rows as $row ) {
+				$gid = (int) $row['item_id'];
+				$album_map[ $gid ][] = (int) $row['album_id'];
+			}
+		}
+
 		foreach ( $items as &$item ) {
 			$item = $this->decorate_gallery_summary( $item );
+			$item['album_ids'] = $album_map[ (int) ( $item['id'] ?? 0 ) ] ?? [];
 		}
 		unset( $item );
 
@@ -270,10 +294,20 @@ final class Repository {
 			'status'              => $status,
 			'cover_attachment_id' => isset( $data['cover_attachment_id'] ) ? absint( $data['cover_attachment_id'] ) : 0,
 			'cover_item_id'       => isset( $data['cover_item_id'] ) ? absint( $data['cover_item_id'] ) : 0,
-			'display_type'        => $this->sanitize_display_type( $data['display_type'] ?? 'grid' ),
+			'display_type'        => $this->sanitize_display_type( $data['display_type'] ?? $this->get_default_gallery_display_type() ),
 			'settings_json'       => wp_json_encode( $settings ),
 			'updated_at'          => current_time( 'mysql' ),
 		];
+
+		// published_at is user-editable (event date can differ from creation date).
+		if ( isset( $data['published_at'] ) ) {
+			$published_at = sanitize_text_field( (string) $data['published_at'] );
+			$payload['published_at'] = '' !== $published_at ? $published_at : null;
+		}
+
+		if ( isset( $data['created_at'] ) && '' !== trim( (string) $data['created_at'] ) ) {
+			$payload['created_at'] = sanitize_text_field( (string) $data['created_at'] );
+		}
 
 		if ( $id > 0 ) {
 			$updated = $wpdb->update( $this->table( 'galleries' ), $payload, [ 'id' => $id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
@@ -284,6 +318,10 @@ final class Repository {
 		} else {
 			$payload['created_by'] = get_current_user_id();
 			$payload['created_at'] = current_time( 'mysql' );
+
+			if ( ! isset( $payload['published_at'] ) ) {
+				$payload['published_at'] = current_time( 'mysql' );
+			}
 
 			$inserted = $wpdb->insert( $this->table( 'galleries' ), $payload ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 
@@ -372,6 +410,88 @@ final class Repository {
 
 		return $this->persist_local_upload_payloads( $gallery_id, $gallery, $uploads );
 	}
+
+	/**
+	 * Imports one small server-directory batch to avoid timeout and memory exhaustion.
+	 *
+	 * @param int    $gallery_id    Gallery ID.
+	 * @param string $root_key      Allowed import root key.
+	 * @param string $relative_path Relative directory path.
+	 * @param int    $offset        Current offset.
+	 * @param int    $limit         Batch size.
+	 * @return array<string,mixed>|\WP_Error
+	 */
+	public function import_gallery_directory_batch( int $gallery_id, string $root_key, string $relative_path, int $offset = 0, int $limit = 10 ) {
+		$gallery = $this->get_gallery( $gallery_id );
+
+		if ( empty( $gallery ) ) {
+			return new \WP_Error( 'mlgp_gallery_not_found', __( 'Galeria nao encontrada.', 'ml-gallery-pro' ) );
+		}
+
+		$offset = max( 0, $offset );
+		$limit  = max( 1, min( 20, $limit ) );
+		$files  = $this->storage->collect_server_import_files( $root_key, $relative_path );
+
+		if ( is_wp_error( $files ) ) {
+			return $files;
+		}
+
+		$total = count( $files );
+
+		if ( 0 === $total ) {
+			return new \WP_Error( 'mlgp_server_import_empty', __( 'Nenhuma imagem valida foi encontrada na pasta do servidor informada.', 'ml-gallery-pro' ) );
+		}
+
+		$batch_files = array_slice( $files, $offset, $limit );
+
+		if ( empty( $batch_files ) ) {
+			return [
+				'editor'      => $this->get_gallery_editor( $gallery_id ),
+				'imported'    => 0,
+				'total'       => $total,
+				'offset'      => $offset,
+				'next_offset' => $offset,
+				'done'        => true,
+			];
+		}
+
+		$uploads = $this->storage->import_gallery_file_batch( $gallery_id, $batch_files );
+
+		if ( is_wp_error( $uploads ) ) {
+			error_log( '[ML Gallery Pro] Server import error: gallery_id=' . $gallery_id . ' root=' . $root_key . ' path=' . $relative_path . ' offset=' . $offset . ' limit=' . $limit . ' message=' . $uploads->get_error_message() );
+			return $uploads;
+		}
+
+		if ( empty( $uploads ) ) {
+			$next_offset = min( $total, $offset + $limit );
+			return [
+				'editor'      => $this->get_gallery_editor( $gallery_id ),
+				'imported'    => 0,
+				'total'       => $total,
+				'offset'      => $offset,
+				'next_offset' => $next_offset,
+				'done'        => $next_offset >= $total,
+			];
+		}
+
+		$editor = $this->persist_local_upload_payloads( $gallery_id, $gallery, $uploads );
+
+		if ( is_wp_error( $editor ) ) {
+			return $editor;
+		}
+
+		$next_offset = min( $total, $offset + $limit );
+
+		return [
+			'editor'      => $editor,
+			'imported'    => count( $uploads ),
+			'total'       => $total,
+			'offset'      => $offset,
+			'next_offset' => $next_offset,
+			'done'        => $next_offset >= $total,
+		];
+	}
+
 
 	/**
 	 * Adds image attachments to a gallery.
@@ -1151,6 +1271,11 @@ final class Repository {
 			'updated_at'          => current_time( 'mysql' ),
 		];
 
+		if ( isset( $data['published_at'] ) ) {
+			$published_at = sanitize_text_field( (string) $data['published_at'] );
+			$payload['published_at'] = '' !== $published_at ? $published_at : null;
+		}
+
 		if ( $id > 0 ) {
 			$updated = $wpdb->update( $this->table( 'albums' ), $payload, [ 'id' => $id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 
@@ -1160,6 +1285,10 @@ final class Repository {
 		} else {
 			$payload['created_by'] = get_current_user_id();
 			$payload['created_at'] = current_time( 'mysql' );
+
+			if ( ! isset( $payload['published_at'] ) ) {
+				$payload['published_at'] = current_time( 'mysql' );
+			}
 
 			$inserted = $wpdb->insert( $this->table( 'albums' ), $payload ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 
@@ -2225,10 +2354,44 @@ final class Repository {
 		$failed_examples  = [];
 		$last_db_error    = '';
 
+		// Build a case-insensitive filename index of existing items in this gallery
+		// so duplicate uploads overwrite instead of creating a second row.
+		$existing_rows       = $this->get_gallery_items_rows( $gallery_id, false );
+		$existing_name_index = [];
+		foreach ( $existing_rows as $existing_row ) {
+			$key = strtolower( sanitize_file_name( (string) ( $existing_row['original_name'] ?? '' ) ) );
+			if ( '' !== $key ) {
+				$existing_name_index[ $key ] = $existing_row;
+			}
+			// Also index by file_name in case original_name differs.
+			$key2 = strtolower( sanitize_file_name( (string) ( $existing_row['file_name'] ?? '' ) ) );
+			if ( '' !== $key2 && ! isset( $existing_name_index[ $key2 ] ) ) {
+				$existing_name_index[ $key2 ] = $existing_row;
+			}
+		}
+
 		foreach ( $uploads as $upload ) {
 			$original_name = $this->truncate_database_filename( (string) ( $upload['original_name'] ?? '' ), 255 );
 			$file_name     = $this->truncate_database_filename( (string) ( $upload['file_name'] ?? '' ), 255 );
 			$item_title    = $this->truncate_database_text( sanitize_text_field( (string) ( $upload['item_title'] ?? '' ) ), 255 );
+
+			// Check for existing item with same filename in this gallery.
+			$lookup_key   = strtolower( sanitize_file_name( $original_name ?: $file_name ) );
+			$lookup_key2  = strtolower( sanitize_file_name( $file_name ?: $original_name ) );
+			$existing_row = $existing_name_index[ $lookup_key ] ?? $existing_name_index[ $lookup_key2 ] ?? null;
+
+			if ( null !== $existing_row ) {
+				// Overwrite: update physical metadata, preserve editorial fields.
+				$updated = $this->update_local_item_from_payload( $existing_row, $upload, $current_time );
+				if ( $updated ) {
+					$created_ids[] = (int) ( $existing_row['id'] ?? 0 );
+					// Update index so a second file with same name in same batch also hits this row.
+					$existing_name_index[ $lookup_key ]  = array_merge( $existing_row, $upload, [ 'id' => $existing_row['id'] ] );
+					$existing_name_index[ $lookup_key2 ] = $existing_name_index[ $lookup_key ];
+				}
+				continue;
+			}
+
 			$payload = [
 				'gallery_id'     => $gallery_id,
 				'attachment_id'  => 0,
@@ -2271,7 +2434,12 @@ final class Repository {
 				continue;
 			}
 
-			$created_ids[] = (int) $wpdb->insert_id;
+			$new_id = (int) $wpdb->insert_id;
+			$created_ids[] = $new_id;
+			// Add newly inserted item to index so subsequent same-name uploads in this batch update it.
+			$new_row = array_merge( $payload, [ 'id' => $new_id, 'gallery_id' => $gallery_id ] );
+			$existing_name_index[ $lookup_key ]  = $new_row;
+			$existing_name_index[ $lookup_key2 ] = $new_row;
 			++$sort_order;
 		}
 
@@ -2315,8 +2483,72 @@ final class Repository {
 			]
 		);
 
+		$this->fire_after_items_stored_hook_safely( $uploads, $gallery_id );
+
 		return $this->get_gallery_editor( $gallery_id );
 	}
+
+	/**
+	 * Fires the ML Media Master integration hook without allowing accidental
+	 * output/notices from listeners to corrupt admin-ajax JSON responses.
+	 *
+	 * The hook name and signature are permanent and must not be changed.
+	 *
+	 * @param array<int, array<string, mixed>> $uploads    Stored upload payloads.
+	 * @param int                              $gallery_id Gallery ID.
+	 */
+	private function fire_after_items_stored_hook_safely( array $uploads, int $gallery_id ): void {
+		// During AJAX, schedule the hook to fire in a separate WP-Cron request
+		// so the JSON response is fully delivered before any heavy listener
+		// (e.g. ML Media Optimizer WebP conversion via exec/Imagick) runs.
+		// This completely isolates the hook execution from the HTTP response.
+		if ( wp_doing_ajax() ) {
+			$transient_key = 'mlgp_hook_' . $gallery_id . '_' . uniqid( '', true );
+			set_transient( $transient_key, [ 'uploads' => $uploads, 'gallery_id' => $gallery_id ], 300 );
+			wp_schedule_single_event( time(), 'mlgp_fire_after_items_stored', [ $transient_key ] );
+			return;
+		}
+
+		// Non-AJAX: fire immediately with output buffer guard.
+		$buffer_level = ob_get_level();
+
+		try {
+			ob_start();
+
+			do_action( 'mlgp_after_items_stored', $uploads, $gallery_id );
+
+			$output = '';
+
+			if ( ob_get_level() > $buffer_level ) {
+				$output = (string) ob_get_clean();
+			}
+
+			if ( '' !== trim( $output ) ) {
+				error_log(
+					sprintf(
+						'[ML Gallery Pro] mlgp_after_items_stored emitted output during gallery %d import and it was suppressed to preserve JSON: %s',
+						$gallery_id,
+						wp_strip_all_tags( substr( $output, 0, 500 ) )
+					)
+				);
+			}
+		} catch ( \Throwable $throwable ) {
+			while ( ob_get_level() > $buffer_level ) {
+				ob_end_clean();
+			}
+
+			error_log(
+				sprintf(
+					'[ML Gallery Pro] mlgp_after_items_stored listener failed for gallery %d: %s in %s:%d',
+					$gallery_id,
+					$throwable->getMessage(),
+					$throwable->getFile(),
+					$throwable->getLine()
+				)
+			);
+		}
+	}
+
 
 	/**
 	 * Updates one local gallery item from a fresh storage payload.
@@ -2528,7 +2760,7 @@ final class Repository {
 			'alt'        => sanitize_text_field( (string) ( $item['item_alt'] ?? '' ) ),
 			'filename'   => basename( (string) ( $item['file_name'] ?: $item['original_name'] ?: '' ) ),
 			'thumb_url'  => ! empty( $item['thumb_url'] ) ? esc_url_raw( (string) $item['thumb_url'] ) : $full_url,
-			'medium_url' => ! empty( $item['medium_url'] ) ? esc_url_raw( (string) $item['medium_url'] ) : $full_url,
+			'medium_url' => ! empty( $item['medium_url'] ) ? esc_url_raw( (string) $item['medium_url'] ) : ( ! empty( $item['large_url'] ) ? esc_url_raw( (string) $item['large_url'] ) : $full_url ),
 			'large_url'  => ! empty( $item['large_url'] ) ? esc_url_raw( (string) $item['large_url'] ) : $full_url,
 			'full_url'   => $full_url,
 			'mime_type'  => sanitize_text_field( (string) ( $item['mime_type'] ?? '' ) ),
@@ -2975,12 +3207,28 @@ final class Repository {
 	 * @return array<string, mixed>
 	 */
 	private function decorate_gallery_summary( array $gallery, bool $with_cover = true ): array {
+		global $wpdb;
+
 		$gallery_id                 = (int) ( $gallery['id'] ?? 0 );
 		$gallery['shortcode']       = $this->gallery_shortcode( $gallery_id );
 		$gallery['legacy_shortcode'] = sprintf( '[ml_gallery_pro gallery="%d"]', $gallery_id );
 
 		if ( $with_cover && $gallery_id > 0 ) {
 			$gallery['cover'] = $this->get_gallery_cover_payload( $gallery_id );
+		}
+
+		// Attach album IDs this gallery belongs to.
+		if ( $gallery_id > 0 ) {
+			$album_ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT album_id FROM {$this->table('album_items')} WHERE item_type = 'gallery' AND item_id = %d",
+					$gallery_id
+				)
+			); // phpcs:ignore
+
+			$gallery['album_ids'] = array_map( 'absint', $album_ids ?: [] );
+		} else {
+			$gallery['album_ids'] = [];
 		}
 
 		return $gallery;
@@ -3175,6 +3423,27 @@ final class Repository {
 	}
 
 	/**
+	 * Returns the display_type from the configured default gallery preset.
+	 *
+	 * @return string
+	 */
+	private function get_default_gallery_display_type(): string {
+		$settings = $this->get_settings();
+		$preset   = sanitize_key( (string) ( $settings['default_gallery_preset'] ?? 'masonry-default' ) );
+
+		$map = [
+			'masonry-default'    => 'masonry',
+			'clean-grid'         => 'grid',
+			'editorial-tile'     => 'tile',
+			'impact-mosaic'      => 'mosaic',
+			'story-justified'    => 'justified',
+			'showcase-filmstrip' => 'filmstrip',
+		];
+
+		return $map[ $preset ] ?? 'masonry';
+	}
+
+	/**
 	 * Sanitizes an integer with min and max bounds.
 	 *
 	 * @param mixed $value Raw value.
@@ -3271,5 +3540,93 @@ final class Repository {
 		}
 
 		return $unique;
+	}
+
+	/**
+	 * Scans the storage directory for a single gallery and syncs found images.
+	 *
+	 * @param int $gallery_id Gallery ID.
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public function scan_and_sync_gallery( int $gallery_id, string $folder_name ) {
+		$gallery = $this->get_gallery( $gallery_id );
+
+		if ( empty( $gallery ) ) {
+			return new \WP_Error( 'mlgp_gallery_not_found', __( 'Galeria nao encontrada.', 'ml-gallery-pro' ) );
+		}
+
+		$payloads = $this->storage->scan_gallery_storage_by_folder( $folder_name );
+
+		if ( is_wp_error( $payloads ) ) {
+			return $payloads;
+		}
+
+		if ( empty( $payloads ) ) {
+			return [
+				'synced' => 0,
+				'editor' => $this->get_gallery_editor( $gallery_id ),
+			];
+		}
+
+		$editor = $this->persist_local_upload_payloads( $gallery_id, $gallery, $payloads );
+
+		if ( is_wp_error( $editor ) ) {
+			return $editor;
+		}
+
+		return [
+			'synced' => count( $payloads ),
+			'editor' => $editor,
+		];
+	}
+
+	/**
+	 * Returns storage directory listing enriched with gallery titles.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function list_storage_dirs_with_titles(): array {
+		$dirs   = $this->storage->list_gallery_storage_dirs();
+		$result = [];
+
+		foreach ( $dirs as $dir ) {
+			$name = (string) ( $dir['name'] ?? '' );
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$result[] = [
+				'name'  => $name,
+				'label' => $name,
+			];
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Returns a lightweight id+title list of albums for the gallery filter dropdown.
+	 *
+	 * @return array<int, array{id: int, title: string}>
+	 */
+	public function get_album_options_for_filter(): array {
+		global $wpdb;
+
+		$rows = $wpdb->get_results(
+			"SELECT id, title FROM {$this->table('albums')} ORDER BY title ASC",
+			ARRAY_A
+		); // phpcs:ignore
+
+		$result = [];
+
+		foreach ( ( $rows ?: [] ) as $row ) {
+			$result[] = [
+				'id'    => (int) $row['id'],
+				'title' => (string) ( $row['title'] ?? '' ),
+			];
+		}
+
+		return $result;
 	}
 }

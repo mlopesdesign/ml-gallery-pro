@@ -78,6 +78,8 @@ final class Ajax {
 		add_action( 'wp_ajax_mlgp_apply_settings_to_all_albums', [ $this, 'apply_settings_to_all_albums' ] );
 		add_action( 'wp_ajax_mlgp_regenerate_all_local_items', [ $this, 'regenerate_all_local_items' ] );
 		add_action( 'wp_ajax_mlgp_regenerate_local_items_batch', [ $this, 'regenerate_local_items_batch' ] );
+		add_action( 'wp_ajax_mlgp_scan_gallery_storage', [ $this, 'scan_gallery_storage' ] );
+		add_action( 'wp_ajax_mlgp_list_storage_dirs', [ $this, 'list_storage_dirs' ] );
 		add_action( 'wp_ajax_mlgp_factory_reset', [ $this, 'factory_reset' ] );
 	}
 
@@ -244,10 +246,10 @@ final class Ajax {
 
 		$gallery = $this->repository->save_gallery(
 			[
-				'title'       => $this->post( 'title' ),
-				'slug'        => $this->post( 'slug' ),
-				'description' => $this->post( 'description' ),
-				'status'      => $this->post( 'status' ),
+				'title'        => $this->post( 'title' ),
+				'slug'         => $this->post( 'slug' ),
+				'description'  => $this->post( 'description' ),
+				'status'       => $this->post( 'status' ),
 			]
 		);
 
@@ -426,29 +428,61 @@ final class Ajax {
 	 * @return void
 	 */
 	public function import_gallery_directory(): void {
-		$this->authorize();
+		$this->json_safe_response(
+			function (): void {
+				$this->authorize();
 
-		$gallery_id = absint( $this->post( 'gallery_id' ) );
-		$editor     = $this->repository->import_gallery_directory(
-			$gallery_id,
-			$this->post( 'server_root' ),
-			$this->post( 'server_path' )
-		);
+				$gallery_id  = absint( $this->post( 'gallery_id' ) );
+				$server_root = $this->post( 'server_root' );
+				$server_path = $this->post( 'server_path' );
+				$offset      = absint( $this->post( 'offset' ) );
+				$limit       = absint( $this->post( 'limit' ) );
 
-		if ( is_wp_error( $editor ) ) {
-			wp_send_json_error(
-				[
-					'message' => $editor->get_error_message(),
-				],
-				422
-			);
-		}
+				if ( $limit < 1 || $limit > 20 ) {
+					$limit = 10;
+				}
 
-		wp_send_json_success(
-			[
-				'editor'  => $editor,
-				'message' => __( 'Pasta do servidor importada com sucesso.', 'ml-gallery-pro' ),
-			]
+				$result = $this->repository->import_gallery_directory_batch( $gallery_id, $server_root, $server_path, $offset, $limit );
+
+				if ( is_wp_error( $result ) ) {
+					$this->log_server_import_error(
+						'wp_error',
+						$result->get_error_message(),
+						[
+							'gallery_id' => $gallery_id,
+							'offset'     => $offset,
+							'limit'      => $limit,
+						]
+					);
+
+					wp_send_json_error(
+						[
+							'message' => $result->get_error_message(),
+							'editor'  => $this->repository->get_gallery_editor( $gallery_id ),
+						],
+						422
+					);
+				}
+
+				wp_send_json_success(
+					[
+						'editor'      => $result['editor'],
+						'imported'    => $result['imported'],
+						'total'       => $result['total'],
+						'offset'      => $result['offset'],
+						'next_offset' => $result['next_offset'],
+						'done'        => $result['done'],
+						'message'     => $result['done']
+							? __( 'Pasta do servidor importada com sucesso.', 'ml-gallery-pro' )
+							: sprintf(
+								/* translators: 1: imported images, 2: total images. */
+								__( 'Importando pasta do servidor: %1$d de %2$d imagens.', 'ml-gallery-pro' ),
+								(int) $result['next_offset'],
+								(int) $result['total']
+							),
+					]
+				);
+			}
 		);
 	}
 
@@ -1365,6 +1399,108 @@ final class Ajax {
 	 * @param string $key Field key.
 	 * @return string
 	 */
+
+	/**
+	 * Runs a JSON AJAX callback while suppressing accidental HTML output and
+	 * converting exceptions/fatals into JSON errors.
+	 *
+	 * @param callable $callback Callback expected to terminate with wp_send_json_*.
+	 */
+	private function json_safe_response( callable $callback ): void {
+		$buffer_level = ob_get_level();
+
+		register_shutdown_function(
+			function () use ( $buffer_level ): void {
+				$error = error_get_last();
+
+				if ( empty( $error ) ) {
+					return;
+				}
+
+				$fatal_types = [ E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR ];
+
+				if ( ! in_array( (int) $error['type'], $fatal_types, true ) ) {
+					return;
+				}
+
+				while ( ob_get_level() > $buffer_level ) {
+					ob_end_clean();
+				}
+
+				$this->log_server_import_error(
+					'fatal',
+					(string) $error['message'],
+					[
+						'file' => (string) $error['file'],
+						'line' => (int) $error['line'],
+					]
+				);
+
+				if ( ! headers_sent() ) {
+					wp_send_json_error(
+						[
+							'message' => __( 'Erro interno ao importar a pasta do servidor. O detalhe real foi registrado no log.', 'ml-gallery-pro' ),
+						],
+						500
+					);
+				}
+			}
+		);
+
+		try {
+			$callback();
+
+			while ( ob_get_level() > $buffer_level ) {
+				ob_end_clean();
+			}
+
+			wp_send_json_error(
+				[
+					'message' => __( 'A importacao terminou sem resposta JSON valida.', 'ml-gallery-pro' ),
+				],
+				500
+			);
+		} catch ( \Throwable $throwable ) {
+			while ( ob_get_level() > $buffer_level ) {
+				ob_end_clean();
+			}
+
+			$this->log_server_import_error(
+				'exception',
+				$throwable->getMessage(),
+				[
+					'file' => $throwable->getFile(),
+					'line' => $throwable->getLine(),
+				]
+			);
+
+			wp_send_json_error(
+				[
+					'message' => __( 'Erro interno ao importar a pasta do servidor. O detalhe real foi registrado no log.', 'ml-gallery-pro' ),
+				],
+				500
+			);
+		}
+	}
+
+	/**
+	 * Writes server import failures to the PHP/WordPress log.
+	 *
+	 * @param string              $code    Error code.
+	 * @param string              $message Error message.
+	 * @param array<string,mixed> $context Extra context.
+	 */
+	private function log_server_import_error( string $code, string $message, array $context = [] ): void {
+		error_log(
+			sprintf(
+				'[ML Gallery Pro][server-import][%s] %s %s',
+				$code,
+				$message,
+				empty( $context ) ? '' : wp_json_encode( $context )
+			)
+		);
+	}
+
 	private function post( string $key ): string {
 		return isset( $_POST[ $key ] ) ? (string) wp_unslash( $_POST[ $key ] ) : '';
 	}
@@ -1413,5 +1549,61 @@ final class Ajax {
 		$decoded = json_decode( $value, true );
 
 		return is_array( $decoded ) ? $decoded : [];
+	}
+
+	/**
+	 * Scans one gallery storage directory and syncs found images.
+	 *
+	 * @return void
+	 */
+	public function scan_gallery_storage(): void {
+		$this->authorize();
+
+		$gallery_id  = absint( $this->post( 'gallery_id' ) );
+		$folder_name = sanitize_text_field( $this->post( 'folder_name' ) );
+
+		if ( $gallery_id <= 0 ) {
+			wp_send_json_error( [ 'message' => __( 'ID da galeria invalido.', 'ml-gallery-pro' ) ], 400 );
+		}
+
+		if ( '' === $folder_name ) {
+			wp_send_json_error( [ 'message' => __( 'Selecione uma pasta para escanear.', 'ml-gallery-pro' ) ], 400 );
+		}
+
+		$result = $this->repository->scan_and_sync_gallery( $gallery_id, $folder_name );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( [ 'message' => $result->get_error_message() ], 500 );
+		}
+
+		$synced = (int) ( $result['synced'] ?? 0 );
+
+		wp_send_json_success(
+			[
+				'synced'  => $synced,
+				'editor'  => $result['editor'] ?? [],
+				'message' => $synced > 0
+					? sprintf(
+						__( 'Escaneamento concluido: %d imagens da pasta "%s" sincronizadas na galeria.', 'ml-gallery-pro' ),
+						$synced,
+						$folder_name
+					)
+					: sprintf(
+						__( 'Nenhuma imagem encontrada na pasta "%s".', 'ml-gallery-pro' ),
+						$folder_name
+					),
+			]
+		);
+	}
+
+	/**
+	 * Lists storage directories with gallery titles for the scan dropdown.
+	 *
+	 * @return void
+	 */
+	public function list_storage_dirs(): void {
+		$this->authorize();
+
+		wp_send_json_success( [ 'dirs' => $this->repository->list_storage_dirs_with_titles() ] );
 	}
 }

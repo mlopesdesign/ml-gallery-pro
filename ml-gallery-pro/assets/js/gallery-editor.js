@@ -384,7 +384,21 @@
 			credentials: "same-origin",
 			body: formData,
 		})
-			.then((response) => response.json())
+			.then(async (response) => {
+				const text = await response.text();
+				let parsed = null;
+
+				try {
+					parsed = JSON.parse(text);
+				} catch (parseError) {
+					const error = new Error(config.strings.genericError || "Nao foi possivel concluir a operacao.");
+					error.responseText = text;
+					error.responseStatus = response.status;
+					throw error;
+				}
+
+				return parsed;
+			})
 			.then((response) => {
 				if (!response.success) {
 					const error = new Error(response.data && response.data.message ? response.data.message : config.strings.genericError);
@@ -471,6 +485,9 @@
 			slug: gallery && gallery.slug ? String(gallery.slug) : "",
 			status: gallery && gallery.status ? String(gallery.status) : "draft",
 			description: gallery && gallery.description ? String(gallery.description) : "",
+			publishedAt: gallery && gallery.published_at ? String(gallery.published_at) : "",
+			createdAt: gallery && gallery.created_at ? String(gallery.created_at) : "",
+			updatedAt: gallery && gallery.updated_at ? String(gallery.updated_at) : "",
 			displayType: gallery && gallery.display_type ? String(gallery.display_type) : (defaults.displayType || "grid"),
 			columnsDesktop: integerValue(gallerySettings.columns_desktop, defaults.columnsDesktop),
 			columnsTablet: integerValue(gallerySettings.columns_tablet, defaults.columnsTablet),
@@ -1124,6 +1141,42 @@
 		`;
 	}
 
+	function renderItemCardVisual(item, index) {
+		const attachment = item.attachment || {};
+		const selected = getSelectedItemIds().includes(Number(item.id || 0));
+		const isCover = !!item.is_cover;
+		const w = Number(attachment.width || 0);
+		const h = Number(attachment.height || 0);
+		const orientation = w && h ? (w >= h ? "H" : "V") : "";
+		const thumbUrl = attachment.thumb_url || attachment.file_url || "";
+
+		return `
+			<article class="mlgp-thumb-card ${isCover ? "is-cover" : ""} ${selected ? "is-selected" : ""}" data-item-id="${item.id}" data-mlgp-drop-item="${item.id}">
+				<div class="mlgp-thumb-card__img">
+					${thumbUrl ? `<img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(item.item_alt || attachment.alt || "")}" loading="lazy">` : '<div class="mlgp-thumb-card__placeholder">Sem preview</div>'}
+					${isCover ? '<span class="mlgp-thumb-card__badge">Capa</span>' : ""}
+					${orientation ? `<span class="mlgp-thumb-card__orient">${orientation}</span>` : ""}
+					<div class="mlgp-thumb-card__overlay">
+						<button type="button" class="mlgp-thumb-card__action" data-mlgp-set-cover="${item.id}" title="Definir como capa">&#9733;</button>
+						<button type="button" class="mlgp-thumb-card__action" data-mlgp-remove-item="${item.id}" title="Excluir">&times;</button>
+						<label class="mlgp-thumb-card__select">
+							<input type="checkbox" ${selected ? "checked" : ""} data-mlgp-select-item="${item.id}">
+						</label>
+					</div>
+				</div>
+				<span class="mlgp-thumb-card__name" draggable="true" data-mlgp-drag-handle="${item.id}">${escapeHtml(item.item_title || attachment.title || `#${index + 1}`)}</span>
+			</article>
+		`;
+	}
+
+	function getBackUrl() {
+		return String((config.pageUrls && config.pageUrls.galleries) || "#");
+	}
+
+	function getViewMode() {
+		return state.editor.viewMode || "visual";
+	}
+
 	function renderCreateFilesList() {
 		if (state.createModal.zipFile) {
 			return `
@@ -1301,7 +1354,7 @@
 						</div>
 					</div>
 					<div class="mlgp-actions">
-						<a class="mlgp-button mlgp-button--ghost" href="${escapeHtml(String((config.pageUrls && config.pageUrls.galleries) || "#"))}">${escapeHtml(config.strings.backToGalleriesAction || "Voltar para galerias")}</a>
+						<a class="mlgp-button mlgp-button--ghost" href="${escapeHtml(getBackUrl())}">${escapeHtml(config.strings.backToGalleriesAction || "Voltar para galerias")}</a>
 						${state.editor.activeId ? `<a class="mlgp-button mlgp-button--accent" href="${escapeHtml(galleryUrl)}">${escapeHtml(config.strings.openGalleryManagerAction || "Abrir manager da galeria")}</a>` : ""}
 					</div>
 				</div>
@@ -1552,6 +1605,16 @@
 					<div class="mlgp-editor-layout">
 						<aside class="mlgp-editor-sidebar">
 							<section class="mlgp-editor-panel">
+								<h3>Capa da galeria</h3>
+								<div class="mlgp-cover-card">
+									${cover && (cover.large_url || cover.medium_url) ? `<img src="${escapeHtml(cover.large_url || cover.medium_url)}" alt="${escapeHtml(cover.alt || cover.title || "")}">` : '<div class="mlgp-cover-card__empty">Nenhuma capa definida</div>'}
+									<div class="mlgp-cover-card__meta">
+										<strong>${cover ? escapeHtml(cover.title || "Imagem selecionada") : "Sem imagem"}</strong>
+										<small>${cover ? escapeHtml(cover.filename || "") : "Selecione uma imagem da galeria para definir a capa"}</small>
+									</div>
+								</div>
+							</section>
+							<section class="mlgp-editor-panel">
 								<h3>Dados da galeria</h3>
 								<div class="mlgp-field">
 									<label for="mlgp-editor-gallery-title">Titulo</label>
@@ -1572,6 +1635,21 @@
 								<div class="mlgp-field">
 									<label for="mlgp-editor-gallery-description">Descricao</label>
 									<textarea id="mlgp-editor-gallery-description" data-mlgp-gallery-field="description">${escapeHtml(state.editor.form.description)}</textarea>
+								</div>
+								<div class="mlgp-field">
+									<label for="mlgp-editor-gallery-published-at">Data de publicacao</label>
+									<input id="mlgp-editor-gallery-published-at" type="datetime-local" value="${escapeHtml((state.editor.form.publishedAt || "").replace(" ", "T").substring(0, 16))}" data-mlgp-gallery-field="publishedAt">
+									<small class="mlgp-field__hint">Data do evento ou publicacao. Editavel para eventos retroativos.</small>
+								</div>
+								<div class="mlgp-field mlgp-field--inline-dates">
+									<div>
+										<label for="mlgp-editor-gallery-created-at">Criada em</label>
+										<input id="mlgp-editor-gallery-created-at" type="datetime-local" value="${escapeHtml((state.editor.form.createdAt || "").replace(" ", "T").substring(0, 16))}" data-mlgp-gallery-field="createdAt">
+									</div>
+									<div>
+										<label>Modificada em</label>
+										<span class="mlgp-field__readonly">${escapeHtml(state.editor.form.updatedAt || "—")}</span>
+									</div>
 								</div>
 							</section>
 							<section class="mlgp-editor-panel">
@@ -1706,16 +1784,6 @@
 								</div>
 								<p class="mlgp-panel__intro">Storage: ${escapeHtml(config.storageLabel || "wp-content/ml-gallery")}</p>
 							</section>
-							<section class="mlgp-editor-panel">
-								<h3>Capa da galeria</h3>
-								<div class="mlgp-cover-card">
-									${cover && cover.medium_url ? `<img src="${escapeHtml(cover.medium_url)}" alt="${escapeHtml(cover.alt || cover.title || "")}">` : '<div class="mlgp-cover-card__empty">Nenhuma capa definida</div>'}
-									<div class="mlgp-cover-card__meta">
-										<strong>${cover ? escapeHtml(cover.title || "Imagem selecionada") : "Sem imagem"}</strong>
-										<small>${cover ? escapeHtml(cover.filename || "") : "Selecione uma imagem da galeria para definir a capa"}</small>
-									</div>
-								</div>
-							</section>
 						</aside>
 						<div class="mlgp-editor-main">
 							<section class="mlgp-editor-panel">
@@ -1749,6 +1817,19 @@
 											</div>
 										` : ""}
 									</div>
+									<div class="mlgp-scan-storage-row">
+										<strong>Escanear pasta de armazenamento</strong>
+										<span>Sincronize imagens enviadas via FTP. Registros existentes sao atualizados sem duplicar.</span>
+										<div class="mlgp-scan-storage-filter">
+											<input type="text" data-mlgp-scan-filter="1" placeholder="Filtrar pastas..." autocomplete="off">
+										</div>
+										<div class="mlgp-scan-storage-controls">
+											<select data-mlgp-scan-folder-select="1" size="8">
+												<option value="">Carregando pastas...</option>
+											</select>
+											<button type="button" class="mlgp-button mlgp-button--accent" data-mlgp-scan-folder="1" ${state.upload.uploading ? "disabled" : ""}>Escanear</button>
+										</div>
+									</div>
 									<strong>Diretorio: ${escapeHtml(config.storageLabel || "wp-content/ml-gallery")}</strong>
 									<p>Arraste imagens para esta area ou use os atalhos acima para subir arquivos, pasta local ou um ZIP diretamente para a galeria.</p>
 									${renderServerImportFields("upload")}
@@ -1764,14 +1845,15 @@
 								<div class="mlgp-panel-header-inline">
 									<div>
 										<h3>Manager de imagens</h3>
-										<p class="mlgp-panel__intro">Edite título, legenda, alt, link, visibilidade, capa, tags e organize a ordem da galeria com drag and drop.</p>
+										<p class="mlgp-panel__intro">${getViewMode() === "visual" ? "Visualize e selecione a capa. Ative o modo avancado para editar campos." : "Edite titulo, legenda, alt, link, visibilidade, capa, tags e organize a ordem."}</p>
 									</div>
 									<div class="mlgp-list__meta">
+										<button type="button" class="mlgp-button ${getViewMode() === "advanced" ? "mlgp-button--accent" : "mlgp-button--ghost"} mlgp-button--sm" data-mlgp-toggle-view="1">${getViewMode() === "visual" ? "Avancado" : "Visual"}</button>
 										<span>${items.length} imagens</span>
 										<span>${selectedCount} selecionadas</span>
 									</div>
 								</div>
-								<div class="mlgp-bulk-toolbar">
+									<div class="mlgp-bulk-toolbar">
 									<div class="mlgp-bulk-toolbar__meta">
 										<strong>Ações em lote</strong>
 										<span>Selecione as imagens e aplique a ação desejada. A ordenação continua disponível em cada card.</span>
@@ -1796,15 +1878,60 @@
 										${renderActiveBulkPanel(selectedCount)}
 									</div>
 								</div>
-								${items.length
-									? `<div class="mlgp-media-grid">${filteredItems.map(renderItemCard).join("")}</div>`
-									: '<div class="mlgp-empty">Nenhuma imagem vinculada ainda. Use "Adicionar imagens".</div>'}
+									${items.length
+										? (getViewMode() === "visual"
+											? `<div class="mlgp-thumb-grid">${filteredItems.map(renderItemCardVisual).join("")}</div>`
+											: `<div class="mlgp-media-grid">${filteredItems.map(renderItemCard).join("")}</div>`)
+										: '<div class="mlgp-empty">Nenhuma imagem vinculada ainda. Use "Adicionar imagens".</div>'}
 							</section>
 						</div>
 					</div>
 				</div>
 			</section>
 		`;
+	}
+
+	let scanDirsCache = null;
+	let scanDirsCacheVersion = "";
+
+	async function populateScanDropdown() {
+		const select = root.querySelector("[data-mlgp-scan-folder-select]");
+		if (!select) {
+			return;
+		}
+
+		const cacheKey = String(state.editor.activeId || "");
+		if (scanDirsCache && scanDirsCacheVersion === cacheKey) {
+			fillScanSelect(select, scanDirsCache, "");
+			return;
+		}
+
+		try {
+			const response = await request("mlgp_list_storage_dirs", {});
+			scanDirsCache = Array.isArray(response.dirs) ? response.dirs : [];
+			scanDirsCacheVersion = cacheKey;
+			fillScanSelect(select, scanDirsCache, "");
+		} catch (error) {
+			select.innerHTML = '<option value="">Erro ao carregar pastas</option>';
+		}
+	}
+
+	function fillScanSelect(select, dirs, filter) {
+		const term = (filter || "").toLowerCase();
+		let html = "";
+		for (const dir of dirs) {
+			const name = dir.name || "";
+			const label = dir.label || name;
+			if (term && label.toLowerCase().indexOf(term) === -1) {
+				continue;
+			}
+			html += `<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
+		}
+		select.innerHTML = html || '<option value="">Nenhuma pasta encontrada</option>';
+		const filterInput = root.querySelector("[data-mlgp-scan-filter]");
+		if (filterInput && !term) {
+			filterInput.placeholder = `Filtrar entre ${dirs.length} pastas...`;
+		}
 	}
 
 	function renderPage() {
@@ -1823,6 +1950,7 @@
 			updateDirtyUi();
 			updateUploadUi();
 			updateCreateModalUi();
+			populateScanDropdown();
 			return;
 		}
 
@@ -2037,6 +2165,8 @@
 			slug: state.editor.form.slug || "",
 			status: state.editor.form.status || "draft",
 			description: state.editor.form.description || "",
+			published_at: state.editor.form.publishedAt ? state.editor.form.publishedAt.replace("T", " ") : "",
+			created_at: state.editor.form.createdAt ? state.editor.form.createdAt.replace("T", " ") : "",
 			display_type: state.editor.form.displayType || "grid",
 			settings: JSON.stringify(serializeGallerySettings()),
 		});
@@ -2510,24 +2640,58 @@
 			});
 
 			try {
-				const response = await request("mlgp_import_gallery_directory", {
-					gallery_id: galleryId,
-					server_root: state.upload.serverRoot || getDefaultServerRoot(),
-					server_path: serverPath,
-				});
+				let offset = 0;
+				let done = false;
+				let lastResponse = null;
+				const limit = 10;
 
-				syncEditor(response.editor, { preserveSelection: true });
-				await refreshGalleries(false);
-				upsertGallerySummaryFromEditor(response.editor);
+				while (!done) {
+					const response = await request("mlgp_import_gallery_directory", {
+						gallery_id: galleryId,
+						server_root: state.upload.serverRoot || getDefaultServerRoot(),
+						server_path: serverPath,
+						offset,
+						limit,
+					});
+
+					lastResponse = response;
+					done = Boolean(response.done);
+					offset = Number(response.next_offset || offset + limit);
+
+					if (response.editor) {
+						syncEditor(response.editor, { preserveSelection: true });
+						upsertGallerySummaryFromEditor(response.editor);
+					}
+
+					const total = Number(response.total || 0);
+					const progress = total > 0
+						? Math.min(98, Math.max(20, Math.round((offset / total) * 100)))
+						: 50;
+
+					setUploadState({
+						uploading: !done,
+						progress: done ? 100 : progress,
+						totalFiles: total,
+						mode: "server",
+						message: response.message || config.strings.serverImportButton || "Importando pasta do servidor...",
+					});
+				}
+
+				if (lastResponse && lastResponse.editor) {
+					syncEditor(lastResponse.editor, { preserveSelection: true });
+					await refreshGalleries(false);
+					upsertGallerySummaryFromEditor(lastResponse.editor);
+				}
+
 				renderPage();
 				setUploadState({
 					uploading: false,
 					progress: 100,
-					totalFiles: 0,
+					totalFiles: Number((lastResponse && lastResponse.total) || 0),
 					mode: "server",
-					message: response.message || config.strings.galleryServerImported || "Pasta do servidor importada com sucesso.",
+					message: (lastResponse && lastResponse.message) || config.strings.galleryServerImported || "Pasta do servidor importada com sucesso.",
 				});
-				showNotice(response.message || config.strings.galleryServerImported || "Pasta do servidor importada com sucesso.");
+				showNotice((lastResponse && lastResponse.message) || config.strings.galleryServerImported || "Pasta do servidor importada com sucesso.");
 				return true;
 			} catch (error) {
 				if (error && error.lastEditor) {
@@ -2797,6 +2961,14 @@
 		const target = event.target;
 
 		if (!(target instanceof HTMLElement)) {
+			return;
+		}
+
+		if (target.dataset.mlgpScanFilter !== undefined && scanDirsCache) {
+			const select = root.querySelector("[data-mlgp-scan-folder-select]");
+			if (select) {
+				fillScanSelect(select, scanDirsCache, target.value);
+			}
 			return;
 		}
 
@@ -3160,7 +3332,7 @@
 			return;
 		}
 
-		const target = event.target.closest("[data-mlgp-open-create-modal],[data-mlgp-close-create-modal],[data-mlgp-submit-create-gallery],[data-mlgp-open-create-source],[data-mlgp-open-editor],[data-mlgp-close-editor],[data-mlgp-delete-gallery],[data-mlgp-copy-shortcode],[data-mlgp-open-upload],[data-mlgp-import-server],[data-mlgp-save-all],[data-mlgp-set-cover],[data-mlgp-remove-item],[data-mlgp-move-item],[data-mlgp-select-all],[data-mlgp-clear-selection],[data-mlgp-clear-item-filters],[data-mlgp-bulk-action],[data-mlgp-apply-preset],[data-mlgp-bulk-tab]");
+		const target = event.target.closest("[data-mlgp-open-create-modal],[data-mlgp-close-create-modal],[data-mlgp-submit-create-gallery],[data-mlgp-open-create-source],[data-mlgp-open-editor],[data-mlgp-close-editor],[data-mlgp-delete-gallery],[data-mlgp-copy-shortcode],[data-mlgp-open-upload],[data-mlgp-import-server],[data-mlgp-save-all],[data-mlgp-set-cover],[data-mlgp-remove-item],[data-mlgp-move-item],[data-mlgp-select-all],[data-mlgp-clear-selection],[data-mlgp-clear-item-filters],[data-mlgp-bulk-action],[data-mlgp-apply-preset],[data-mlgp-bulk-tab],[data-mlgp-scan-folder],[data-mlgp-toggle-view]");
 
 		if (!target) {
 			return;
@@ -3244,6 +3416,12 @@
 				return;
 			}
 
+			const backUrl = getBackUrl();
+			if (backUrl && backUrl !== "#") {
+				window.location.href = backUrl;
+				return;
+			}
+
 			syncEditor(null);
 			renderPage();
 			return;
@@ -3299,6 +3477,42 @@
 
 		if (target.dataset.mlgpApplyPreset) {
 			applyGalleryPreset(target.dataset.mlgpApplyPreset);
+			return;
+		}
+
+		if (target.dataset.mlgpToggleView) {
+			state.editor.viewMode = getViewMode() === "visual" ? "advanced" : "visual";
+			renderPage();
+			return;
+		}
+
+		if (target.dataset.mlgpScanFolder) {
+			const select = root.querySelector("[data-mlgp-scan-folder-select]");
+			const folderName = select ? select.value : "";
+			if (!folderName) {
+				showNotice("Selecione uma pasta para escanear.", "error");
+				return;
+			}
+			const galleryId = Number(state.editor.activeId || 0);
+			if (!galleryId) {
+				showNotice("Abra uma galeria antes de escanear.", "error");
+				return;
+			}
+			try {
+				target.disabled = true;
+				target.textContent = "Escaneando...";
+				const response = await request("mlgp_scan_gallery_storage", { gallery_id: galleryId, folder_name: folderName });
+				if (response.editor) {
+					syncEditor(response.editor, { preserveSelection: true });
+				}
+				showNotice(response.message || `Escaneamento concluído: ${Number(response.synced || 0)} imagens sincronizadas.`);
+				renderPage();
+			} catch (error) {
+				showNotice(error.message || config.strings.genericError, "error");
+			} finally {
+				target.disabled = false;
+				target.textContent = "Escanear";
+			}
 			return;
 		}
 

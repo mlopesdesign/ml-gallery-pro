@@ -255,6 +255,105 @@ final class Storage {
 	 * @param string $relative_path  Relative folder path inside the chosen root.
 	 * @return array<int, array<string, mixed>>|\WP_Error
 	 */
+
+	/**
+	 * Collects valid server import image files without copying them yet.
+	 *
+	 * @param string $root_key      Allowed import root key.
+	 * @param string $relative_path Relative directory path.
+	 * @return array<int,string>|\WP_Error
+	 */
+	public function collect_server_import_files( string $root_key, string $relative_path ) {
+		$source_dir = $this->resolve_server_import_directory( $root_key, $relative_path );
+
+		if ( is_wp_error( $source_dir ) ) {
+			return $source_dir;
+		}
+
+		$files = [];
+
+		try {
+			$iterator = new \RecursiveIteratorIterator(
+				new \RecursiveDirectoryIterator( $source_dir, \FilesystemIterator::SKIP_DOTS ),
+				\RecursiveIteratorIterator::SELF_FIRST
+			);
+
+			foreach ( $iterator as $entry ) {
+				try {
+					if ( ! $entry->isFile() ) {
+						continue;
+					}
+
+					$path = wp_normalize_path( $entry->getPathname() );
+
+					if ( ! $this->is_supported_server_import_image( $path ) ) {
+						continue;
+					}
+
+					$files[] = $path;
+				} catch ( \Throwable $throwable ) {
+					error_log( '[ML Gallery Pro][server-import][skip-entry] ' . $throwable->getMessage() );
+					continue;
+				}
+			}
+		} catch ( \Throwable $throwable ) {
+			error_log( '[ML Gallery Pro][server-import][iterator] ' . $throwable->getMessage() );
+
+			return new \WP_Error(
+				'mlgp_server_import_iterator_failed',
+				__( 'Nao foi possivel ler a pasta do servidor com seguranca.', 'ml-gallery-pro' )
+			);
+		}
+
+		sort( $files, SORT_NATURAL | SORT_FLAG_CASE );
+
+		return $files;
+	}
+
+	/**
+	 * Imports a small batch of server image paths into the gallery storage.
+	 *
+	 * @param int               $gallery_id Gallery ID.
+	 * @param array<int,string> $files      Source file paths.
+	 * @return array<int,array<string,mixed>>|\WP_Error
+	 */
+	public function import_gallery_file_batch( int $gallery_id, array $files ) {
+		$gallery_dir = $this->ensure_gallery_dir( $gallery_id );
+
+		if ( is_wp_error( $gallery_dir ) ) {
+			return $gallery_dir;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		$gallery_url = $this->gallery_url( $gallery_id );
+		$payloads    = [];
+
+		foreach ( $files as $source_path ) {
+			$source_path = wp_normalize_path( (string) $source_path );
+			$basename    = sanitize_file_name( basename( $source_path ) );
+
+			if ( '' === $basename || ! is_readable( $source_path ) || ! $this->is_supported_server_import_image( $source_path ) ) {
+				continue;
+			}
+
+			$payload = $this->store_image_from_path( $source_path, $basename, $gallery_dir, $gallery_url, false );
+
+			if ( is_wp_error( $payload ) ) {
+				error_log( '[ML Gallery Pro][server-import][file] ' . $source_path . ' - ' . $payload->get_error_message() );
+				continue;
+			}
+
+			$payloads[] = $payload;
+		}
+
+		if ( empty( $payloads ) ) {
+			return [];
+		}
+
+		return $payloads;
+	}
+
 	public function import_gallery_directory( int $gallery_id, string $root_key, string $relative_path ) {
 		$gallery_dir = $this->ensure_gallery_dir( $gallery_id );
 
@@ -319,11 +418,11 @@ final class Storage {
 			return new \WP_Error( 'mlgp_regenerate_missing_file', __( 'Nao foi possivel localizar o arquivo original para regenerar as previews.', 'ml-gallery-pro' ) );
 		}
 
-		$gallery_dir = $this->ensure_gallery_dir( $gallery_id );
+		require_once ABSPATH . 'wp-admin/includes/image.php';
 
-		if ( is_wp_error( $gallery_dir ) ) {
-			return $gallery_dir;
-		}
+		// Use the actual directory where the file lives, not gallery-{ID}.
+		$actual_dir = wp_normalize_path( dirname( $file_path ) );
+		$actual_url = $this->resolve_gallery_real_url( $actual_dir );
 
 		$filename      = ! empty( $item['file_name'] ) ? sanitize_file_name( (string) $item['file_name'] ) : basename( $file_path );
 		$original_name = ! empty( $item['original_name'] ) ? sanitize_file_name( (string) $item['original_name'] ) : $filename;
@@ -334,8 +433,8 @@ final class Storage {
 			$filename,
 			$original_name,
 			$mime_type,
-			$gallery_dir,
-			$this->gallery_url( $gallery_id )
+			$actual_dir,
+			$actual_url
 		);
 
 		if ( is_wp_error( $payload ) ) {
@@ -619,7 +718,12 @@ final class Storage {
 			return new \WP_Error( 'mlgp_import_invalid_dimensions', __( 'A imagem importada nao pode ser processada.', 'ml-gallery-pro' ) );
 		}
 
-		$filename    = $this->prepare_storage_filename( $gallery_dir, ! empty( $filetype['proper_filename'] ) ? (string) $filetype['proper_filename'] : $original_name );
+		$desired_name = ! empty( $filetype['proper_filename'] ) ? (string) $filetype['proper_filename'] : $original_name;
+		$safe_name    = $this->truncate_filename( sanitize_file_name( $desired_name ), 180 );
+		// If a file with this exact sanitized name already exists in the gallery
+		// directory, overwrite it instead of generating a suffixed duplicate.
+		$overwrite = file_exists( trailingslashit( $gallery_dir ) . $safe_name );
+		$filename    = $this->prepare_storage_filename( $gallery_dir, $desired_name, $overwrite );
 		$target_path = trailingslashit( $gallery_dir ) . $filename;
 
 		if ( wp_normalize_path( $source_path ) !== wp_normalize_path( $target_path ) ) {
@@ -733,9 +837,8 @@ final class Storage {
 
 		$settings    = $this->image_processing_settings();
 		$definitions = [
-			'thumb'  => [ (int) $settings['thumb_width'], (int) $settings['thumb_height'], ! empty( $settings['thumb_crop'] ) ],
-			'medium' => [ (int) $settings['medium_width'], (int) $settings['medium_height'], false ],
-			'large'  => [ (int) $settings['large_width'], (int) $settings['large_height'], false ],
+			'thumb' => [ (int) $settings['thumb_width'], (int) $settings['thumb_height'], ! empty( $settings['thumb_crop'] ) ],
+			'large' => [ (int) $settings['large_width'], (int) $settings['large_height'], false ],
 		];
 
 		$variants = [];
@@ -962,8 +1065,220 @@ final class Storage {
 	 * @param string $filename  Requested file name.
 	 * @return string
 	 */
-	private function prepare_storage_filename( string $directory, string $filename ): string {
-		return wp_unique_filename( $directory, $this->truncate_filename( sanitize_file_name( $filename ), 180 ) );
+	private function prepare_storage_filename( string $directory, string $filename, bool $overwrite = false ): string {
+		$safe = $this->truncate_filename( sanitize_file_name( $filename ), 180 );
+
+		if ( $overwrite ) {
+			return $safe;
+		}
+
+		return wp_unique_filename( $directory, $safe );
+	}
+
+	/**
+	 * Determines whether a file path points to a supported image for server import.
+	 *
+	 * @param string $path Absolute file path.
+	 * @return bool
+	 */
+	/**
+	 * Resolves the actual storage directory for a gallery.
+	 *
+	 * Tries in order:
+	 * 1. Standard path: gallery-{ID}
+	 * 2. Slug-based path: {slug} (migrated galleries)
+	 * 3. Path extracted from existing gallery items file_path in DB.
+	 *
+	 * @param int    $gallery_id Gallery ID.
+	 * @param string $slug       Gallery slug (optional).
+	 * @return string|null Absolute path or null if nothing found.
+	 */
+	public function resolve_gallery_real_dir( int $gallery_id, string $slug = '' ): ?string {
+		$base = $this->base_dir();
+
+		// 1. Standard directory.
+		$standard = $this->gallery_dir( $gallery_id );
+		if ( is_dir( $standard ) ) {
+			return $standard;
+		}
+
+		// 2. Slug-based directory (migrated galleries).
+		if ( '' !== $slug ) {
+			$slug_dir = trailingslashit( $base ) . sanitize_file_name( $slug );
+			if ( is_dir( $slug_dir ) ) {
+				return $slug_dir;
+			}
+		}
+
+		// 3. Detect from existing items file_path.
+		global $wpdb;
+		$table = $wpdb->prefix . 'mlgp_gallery_items';
+		$file_path = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT file_path FROM {$table} WHERE gallery_id = %d AND storage = 'local' AND file_path != '' LIMIT 1",
+				$gallery_id
+			)
+		); // phpcs:ignore
+
+		if ( ! empty( $file_path ) ) {
+			$dir = dirname( wp_normalize_path( $file_path ) );
+			if ( '' !== $dir && is_dir( $dir ) ) {
+				return $dir;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Resolves the gallery URL from an absolute directory path.
+	 *
+	 * @param string $gallery_dir Absolute directory path.
+	 * @return string Gallery URL.
+	 */
+	public function resolve_gallery_real_url( string $gallery_dir ): string {
+		$base_dir = wp_normalize_path( $this->base_dir() );
+		$norm_dir = wp_normalize_path( $gallery_dir );
+
+		// If directory is inside the base storage, compute URL.
+		if ( 0 === strpos( $norm_dir, $base_dir ) ) {
+			$relative = ltrim( substr( $norm_dir, strlen( $base_dir ) ), '/' );
+			return trailingslashit( $this->base_url() ) . $relative;
+		}
+
+		// Fallback: try wp_content relative.
+		$content_dir = wp_normalize_path( WP_CONTENT_DIR );
+		if ( 0 === strpos( $norm_dir, $content_dir ) ) {
+			$relative = ltrim( substr( $norm_dir, strlen( $content_dir ) ), '/' );
+			return content_url( $relative );
+		}
+
+		return trailingslashit( $this->base_url() ) . basename( $gallery_dir );
+	}
+
+	private function is_supported_server_import_image( string $path ): bool {
+		$extension = strtolower( (string) pathinfo( $path, PATHINFO_EXTENSION ) );
+		$allowed   = [ 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'avif' ];
+
+		return in_array( $extension, $allowed, true );
+	}
+
+	/**
+	 * Scans a gallery storage directory and builds payloads for every original
+	 * image already present on disk, without copying or moving anything.
+	 *
+	 * @param int $gallery_id Gallery ID.
+	 * @return array<int, array<string, mixed>>|\WP_Error
+	 */
+	public function scan_gallery_storage_by_folder( string $folder_name ) {
+		$base        = $this->base_dir();
+		$gallery_dir = trailingslashit( $base ) . sanitize_file_name( $folder_name );
+
+		if ( ! is_dir( $gallery_dir ) ) {
+			return new \WP_Error(
+				'mlgp_scan_dir_missing',
+				sprintf( __( 'A pasta "%s" nao existe no armazenamento.', 'ml-gallery-pro' ), $folder_name )
+			);
+		}
+
+		$gallery_url = $this->resolve_gallery_real_url( $gallery_dir );
+		$payloads    = [];
+
+		try {
+			$iterator = new \DirectoryIterator( $gallery_dir );
+
+			foreach ( $iterator as $entry ) {
+				if ( $entry->isDot() || ! $entry->isFile() ) {
+					continue;
+				}
+
+				$filename = $entry->getFilename();
+
+				if ( ! $this->is_supported_server_import_image( $filename ) ) {
+					continue;
+				}
+
+				if ( preg_match( '/-(thumb|medium|large)\.[a-z]+$/i', $filename ) ) {
+					continue;
+				}
+
+				$file_path = wp_normalize_path( $entry->getPathname() );
+
+				if ( ! is_readable( $file_path ) ) {
+					continue;
+				}
+
+				$mime  = (string) ( wp_check_filetype( $filename )['type'] ?? '' );
+				$size  = $entry->getSize();
+				$title = sanitize_text_field( pathinfo( $filename, PATHINFO_FILENAME ) );
+
+				$payloads[] = [
+					'original_name' => sanitize_file_name( $filename ),
+					'file_name'     => $filename,
+					'file_path'     => $file_path,
+					'file_url'      => trailingslashit( $gallery_url ) . $filename,
+					'thumb_path'    => '',
+					'thumb_url'     => '',
+					'medium_path'   => '',
+					'medium_url'    => '',
+					'large_path'    => '',
+					'large_url'     => '',
+					'mime_type'     => $mime,
+					'width'         => 0,
+					'height'        => 0,
+					'file_size'     => $size ?: 0,
+					'item_title'    => $title,
+				];
+			}
+		} catch ( \Throwable $throwable ) {
+			return new \WP_Error(
+				'mlgp_scan_iterator_failed',
+				__( 'Nao foi possivel ler a pasta.', 'ml-gallery-pro' )
+			);
+		}
+
+		return $payloads;
+	}
+
+	/**
+	 * Lists all existing gallery storage subdirectories with their numeric IDs.
+	 *
+	 * @return array<int, array{gallery_id: int, path: string}>
+	 */
+	public function list_gallery_storage_dirs(): array {
+		$base = $this->base_dir();
+
+		if ( ! is_dir( $base ) ) {
+			return [];
+		}
+
+		$dirs = [];
+
+		try {
+			$iterator = new \DirectoryIterator( $base );
+
+			foreach ( $iterator as $entry ) {
+				if ( $entry->isDot() || ! $entry->isDir() ) {
+					continue;
+				}
+
+				$name = $entry->getFilename();
+				$path = wp_normalize_path( $entry->getPathname() );
+
+				$dirs[] = [
+					'name' => $name,
+					'path' => $path,
+				];
+			}
+		} catch ( \Throwable $throwable ) {
+			return [];
+		}
+
+		usort( $dirs, static function ( $a, $b ) {
+			return strnatcasecmp( $a['name'], $b['name'] );
+		} );
+
+		return $dirs;
 	}
 
 	/**

@@ -99,6 +99,9 @@ final class Plugin {
 			$admin = new Admin( $this->repository, $this->license_manager );
 			$admin->hooks();
 		}
+
+		// WP-Cron handler: fires mlgp_after_items_stored in an isolated request.
+		add_action( 'mlgp_fire_after_items_stored', [ $this, 'cron_fire_after_items_stored' ] );
 	}
 
 	/**
@@ -106,6 +109,15 @@ final class Plugin {
 	 *
 	 * @return void
 	 */
+	public function cron_fire_after_items_stored( string $transient_key ): void {
+		$data = get_transient( $transient_key );
+		if ( ! is_array( $data ) || empty( $data['uploads'] ) || ! isset( $data['gallery_id'] ) ) {
+			return;
+		}
+		delete_transient( $transient_key );
+		do_action( 'mlgp_after_items_stored', $data['uploads'], (int) $data['gallery_id'] );
+	}
+
 	public function load_textdomain(): void {
 		load_plugin_textdomain( 'ml-gallery-pro', false, dirname( MLGP_BASENAME ) . '/languages' );
 	}

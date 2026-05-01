@@ -234,6 +234,7 @@ final class Admin {
 				'uploadBatchSize' => $this->get_upload_batch_size(),
 				'storageLabel' => wp_normalize_path( str_replace( wp_normalize_path( trailingslashit( ABSPATH ) ), '', wp_normalize_path( trailingslashit( WP_CONTENT_DIR ) . Storage::BASE_DIRNAME ) ) ),
 				'serverImportRoots' => $this->repository->get_server_import_sources(),
+				'albumList'         => $this->repository->get_album_options_for_filter(),
 				'notice'     => $notice,
 				'settings'  => $this->repository->get_settings(),
 				'license'   => $this->license_manager->build_payload(),
