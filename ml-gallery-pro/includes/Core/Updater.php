@@ -1,7 +1,8 @@
 <?php
 /**
- * GitHub Updater - notifica o WordPress quando ha nova versao disponivel
- * no repositorio mlopesdesign/ml-gallery-pro.
+ * GitHub Updater — notifica o WordPress quando há nova versão disponível
+ * no repositório mlopesdesign/ml-gallery-pro e fornece o ZIP para atualização
+ * automática direto pelo painel WP.
  *
  * @package MLGalleryPro
  */
@@ -119,12 +120,18 @@ class Updater {
 
 		global $wp_filesystem;
 
-		$install_dir = $result['destination'] ?? '';
-		$target_dir  = WP_PLUGIN_DIR . '/' . $this->plugin_slug;
+		$install_dir = trailingslashit( $result['destination'] ?? '' );
+		$target_dir  = trailingslashit( WP_PLUGIN_DIR . '/' . $this->plugin_slug );
 
 		if ( $install_dir && $install_dir !== $target_dir ) {
-			$wp_filesystem->move( $install_dir, $target_dir, true );
-			$result['destination'] = $target_dir;
+			// Se o source code zip do GitHub extraiu para uma pasta contendo o slug dentro
+			$inner = trailingslashit( $install_dir . $this->plugin_slug );
+			if ( $wp_filesystem->is_dir( $inner ) ) {
+				$install_dir = $inner;
+			}
+
+			$wp_filesystem->move( untrailingslashit( $install_dir ), untrailingslashit( $target_dir ), true );
+			$result['destination'] = untrailingslashit( $target_dir );
 		}
 
 		activate_plugin( $this->plugin_file );
@@ -171,6 +178,7 @@ class Updater {
 			}
 		}
 
+		// Fallback: source code zip do GitHub (pasta interna será renomeada pelo after_install)
 		return 'https://github.com/' . $this->github_repo
 			. '/archive/refs/tags/' . $release['tag_name'] . '.zip';
 	}
