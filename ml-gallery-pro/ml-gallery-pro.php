@@ -3,7 +3,7 @@
  * Plugin Name: ML Gallery Pro
  * Plugin URI: https://mlopesdesign.com/
  * Description: Galerias e álbuns profissionais para WordPress com painel dedicado, AJAX e estrutura escalável.
- * Version: 0.26.9
+ * Version: 0.26.10
  * Author: Mlopesdesign
  * Author URI: https://mlopesdesign.com/
  * Text Domain: ml-gallery-pro
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MLGP_VERSION', '0.26.9' );
+define( 'MLGP_VERSION', '0.26.10' );
 define( 'MLGP_FILE', __FILE__ );
 define( 'MLGP_BASENAME', plugin_basename( __FILE__ ) );
 define( 'MLGP_DIR', plugin_dir_path( __FILE__ ) );
