@@ -55,10 +55,10 @@ if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 
 # Lista de arquivos (com exclusoes)
 $exclude = @('\/\.git(\/|$)', '\\\.(DS_Store|log)$', '\/Thumbs\.db$', '\/Desktop\.ini$', '\\\.(log|swp|swo|idea|vscode)', '\/node_modules\/', '\/vendor\/', '\.zip$')
-$files = Get-ChildItem -Path $pluginDir -Recurse -File | Where-Object {
+$files = @(Get-ChildItem -Path $pluginDir -Recurse -File | Where-Object {
     $p = $_.FullName
     -not ($exclude | Where-Object { $p -match $_ })
-}
+} | Select-Object -ExpandProperty FullName)
 
 Compress-Archive -Path $files -DestinationPath $zipPath -CompressionLevel Optimal
 
