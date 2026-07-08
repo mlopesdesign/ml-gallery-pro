@@ -288,16 +288,24 @@ final class Repository {
 		$slug = $this->ensure_unique_slug( $this->table( 'galleries' ), $slug, $id );
 
 		$payload = [
-			'title'               => $title,
-			'slug'                => $slug,
-			'description'         => isset( $data['description'] ) ? wp_kses_post( wp_unslash( (string) $data['description'] ) ) : '',
-			'status'              => $status,
-			'cover_attachment_id' => isset( $data['cover_attachment_id'] ) ? absint( $data['cover_attachment_id'] ) : 0,
-			'cover_item_id'       => isset( $data['cover_item_id'] ) ? absint( $data['cover_item_id'] ) : 0,
-			'display_type'        => $this->sanitize_display_type( $data['display_type'] ?? $this->get_default_gallery_display_type() ),
-			'settings_json'       => wp_json_encode( $settings ),
-			'updated_at'          => current_time( 'mysql' ),
+			'title'         => $title,
+			'slug'          => $slug,
+			'description'   => isset( $data['description'] ) ? wp_kses_post( wp_unslash( (string) $data['description'] ) ) : '',
+			'status'        => $status,
+			'display_type'  => $this->sanitize_display_type( $data['display_type'] ?? $this->get_default_gallery_display_type() ),
+			'settings_json' => wp_json_encode( $settings ),
+			'updated_at'    => current_time( 'mysql' ),
 		];
+
+		// Cover selection belongs to the gallery-items save flow. Preserve the
+		// stored cover when a settings-only request does not explicitly send it.
+		if ( array_key_exists( 'cover_attachment_id', $data ) ) {
+			$payload['cover_attachment_id'] = absint( $data['cover_attachment_id'] );
+		}
+
+		if ( array_key_exists( 'cover_item_id', $data ) ) {
+			$payload['cover_item_id'] = absint( $data['cover_item_id'] );
+		}
 
 		// published_at is user-editable (event date can differ from creation date).
 		if ( isset( $data['published_at'] ) ) {

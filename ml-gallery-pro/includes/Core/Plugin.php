@@ -10,6 +10,7 @@ namespace MLGP\Core;
 use MLGP\Admin\Admin;
 use MLGP\Admin\Ajax;
 use MLGP\Blocks\GalleryBlock;
+use MLGP\Core\Updater;
 use MLGP\Database\Installer;
 use MLGP\Database\Repository;
 use MLGP\Frontend\Shortcodes;
@@ -81,8 +82,21 @@ final class Plugin {
 		}
 
 		$this->booted = true;
-		Installer::maybe_upgrade();
+
+		if ( Installer::needs_upgrade() ) {
+			Installer::maybe_upgrade();
+		}
+
 		$this->license_manager->hooks();
+
+		// GitHub auto-updater — notifica o WP quando há nova versão disponível.
+		$updater = new Updater(
+			MLGP_BASENAME,
+			'ml-gallery-pro',
+			'mlopesdesign/ml-gallery-pro',
+			MLGP_VERSION
+		);
+		$updater->hooks();
 
 		add_action( 'init', [ $this, 'load_textdomain' ] );
 
@@ -105,8 +119,9 @@ final class Plugin {
 	}
 
 	/**
-	 * Loads translations.
+	 * Fires mlgp_after_items_stored from a WP-Cron context using a transient payload.
 	 *
+	 * @param string $transient_key Transient key holding the upload payload.
 	 * @return void
 	 */
 	public function cron_fire_after_items_stored( string $transient_key ): void {

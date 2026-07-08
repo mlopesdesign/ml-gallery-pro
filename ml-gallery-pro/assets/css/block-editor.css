@@ -1,6 +1,11 @@
-.wp-block[data-type="ml-gallery-pro/gallery"] {
+/* ── Block wrapper ──────────────────────────────────────────────────────── */
+
+.wp-block[data-type="ml-gallery-pro/gallery"],
+.mlgp-block-editor__wrapper {
 	border-radius: 16px;
 }
+
+/* ── Preview container ──────────────────────────────────────────────────── */
 
 .mlgp-block-editor__preview {
 	padding: 18px;
@@ -10,6 +15,9 @@
 }
 
 .mlgp-block-editor__preview-label {
+	display: flex;
+	align-items: center;
+	gap: 12px;
 	margin-bottom: 14px;
 	color: #52606d;
 	font-size: 11px;
@@ -18,12 +26,43 @@
 	text-transform: uppercase;
 }
 
+.mlgp-block-editor__preview-change {
+	/* override WP button defaults so it looks like a small inline link */
+	font-size: 11px !important;
+	font-weight: 600 !important;
+	text-transform: none !important;
+	letter-spacing: normal !important;
+}
+
+/*
+ * Prevent the ServerSideRender preview from capturing mouse events.
+ * This lets Gutenberg's own overlay handle clicks for block selection.
+ */
+.mlgp-block-editor__preview-body {
+	pointer-events: none;
+	user-select: none;
+}
+
+.mlgp-block-editor__preview-body > * {
+	pointer-events: none;
+}
+
+.mlgp-block-editor__preview--text {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+/* ── Empty-state copy ───────────────────────────────────────────────────── */
+
 .mlgp-block-editor__empty-copy {
 	margin: 0;
 	color: #52606d;
 	font-size: 13px;
 	line-height: 1.6;
 }
+
+/* ── Color control ──────────────────────────────────────────────────────── */
 
 .mlgp-block-editor__color {
 	display: grid;
@@ -55,4 +94,56 @@
 	border-radius: 16px;
 	background: #fff;
 	box-shadow: none;
+}
+
+/* ── Add Gallery / Add Album insert buttons ─────────────────────────────── */
+
+.mlgp-block-editor__insert-buttons {
+	display: flex;
+	gap: 10px;
+	margin-top: 16px;
+	flex-wrap: wrap;
+}
+
+.mlgp-block-editor__insert-btn {
+	display: inline-flex !important;
+	align-items: center;
+	gap: 6px;
+}
+
+.mlgp-block-editor__insert-btn .dashicons {
+	width: 18px;
+	height: 18px;
+	font-size: 18px;
+	line-height: 1;
+	flex-shrink: 0;
+}
+
+.mlgp-block-editor__sidebar-insert {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+	flex-wrap: wrap;
+}
+
+/* ── Quick-Insert Modal ──────────────────────────────────────────────────── */
+
+.mlgp-insert-modal .components-modal__content {
+	min-width: 340px;
+}
+
+.mlgp-insert-modal__body {
+	margin-bottom: 24px;
+}
+
+.mlgp-insert-modal__empty {
+	margin: 0;
+	color: #52606d;
+	font-size: 13px;
+}
+
+.mlgp-insert-modal__footer {
+	display: flex;
+	gap: 10px;
+	justify-content: flex-end;
 }

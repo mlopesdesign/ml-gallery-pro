@@ -122,11 +122,6 @@ final class Ajax {
 	}
 
 	/**
-	 * Deactivates the current license.
-	 *
-	 * @return void
-	 */
-	/**
 	 * Verifies the nonce used by the license actions.
 	 *
 	 * @return void
@@ -145,6 +140,11 @@ final class Ajax {
 		}
 	}
 
+	/**
+	 * Deactivates the current license.
+	 *
+	 * @return void
+	 */
 	public function deactivate_license(): void {
 		$this->authorize();
 		$this->verify_license_request_nonce();
@@ -1256,11 +1256,6 @@ final class Ajax {
 	}
 
 	/**
-	 * Regenerates every local item using the current image settings.
-	 *
-	 * @return void
-	 */
-		/**
 	 * Resets plugin data to factory defaults.
 	 *
 	 * @return void
@@ -1290,6 +1285,11 @@ final class Ajax {
 	}
 
 
+	/**
+	 * Processes one batch of local items for regeneration.
+	 *
+	 * @return void
+	 */
 	public function regenerate_local_items_batch(): void {
 		$this->authorize();
 
@@ -1321,6 +1321,11 @@ final class Ajax {
 	}
 
 
+	/**
+	 * Regenerates every local item using the current image settings.
+	 *
+	 * @return void
+	 */
 	public function regenerate_all_local_items(): void {
 		$this->authorize();
 
@@ -1392,13 +1397,6 @@ final class Ajax {
 			);
 		}
 	}
-
-	/**
-	 * Reads a POST field.
-	 *
-	 * @param string $key Field key.
-	 * @return string
-	 */
 
 	/**
 	 * Runs a JSON AJAX callback while suppressing accidental HTML output and
@@ -1501,6 +1499,12 @@ final class Ajax {
 		);
 	}
 
+	/**
+	 * Reads a POST field.
+	 *
+	 * @param string $key Field key.
+	 * @return string
+	 */
 	private function post( string $key ): string {
 		return isset( $_POST[ $key ] ) ? (string) wp_unslash( $_POST[ $key ] ) : '';
 	}

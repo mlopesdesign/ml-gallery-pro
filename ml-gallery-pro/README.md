@@ -4,7 +4,7 @@ Galerias e álbuns profissionais para WordPress com painel dedicado, AJAX e estr
 
 ## Versão Atual
 
-**v0.26.0**
+**v0.26.15**
 
 ## Requisitos
 

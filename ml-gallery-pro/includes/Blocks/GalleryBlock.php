@@ -99,6 +99,11 @@ final class GalleryBlock {
 				'editor_style'    => 'mlgp-block-editor',
 				'render_callback' => [ $this, 'render_block' ],
 				'attributes'      => $this->get_attributes_schema(),
+				'supports'        => [
+					'html'     => false,
+					'multiple' => true,
+					'align'    => [ 'wide', 'full' ],
+				],
 			]
 		);
 	}
@@ -166,6 +171,13 @@ final class GalleryBlock {
 					'contentPanel'          => __( 'Conteudo', 'ml-gallery-pro' ),
 					'navigationPanel'       => __( 'Navegacao', 'ml-gallery-pro' ),
 					'typographyPanel'       => __( 'Tipografia', 'ml-gallery-pro' ),
+					'addGalleryButton'      => __( 'Add Gallery', 'ml-gallery-pro' ),
+					'addAlbumButton'        => __( 'Add Album', 'ml-gallery-pro' ),
+					'changeGalleryButton'   => __( 'Change Gallery', 'ml-gallery-pro' ),
+					'changeAlbumButton'     => __( 'Change Album', 'ml-gallery-pro' ),
+					'insertGalleryTitle'    => __( 'Inserir Galeria', 'ml-gallery-pro' ),
+					'insertAlbumTitle'      => __( 'Inserir Album', 'ml-gallery-pro' ),
+					'insertAction'          => __( 'Inserir', 'ml-gallery-pro' ),
 				],
 			]
 		);

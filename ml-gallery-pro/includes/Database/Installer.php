@@ -132,6 +132,25 @@ final class Installer {
 
 		update_option( 'mlgp_settings', $settings );
 		update_option( 'mlgp_version', MLGP_VERSION );
+
+		if ( is_admin() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			self::cleanup_old_installations_once();
+		}
+	}
+
+	/**
+	 * Checks whether database/install routines need to run.
+	 *
+	 * @return bool
+	 */
+	public static function needs_upgrade(): bool {
+		$current_version = (string) get_option( 'mlgp_version', '' );
+
+		if ( '' === $current_version ) {
+			return true;
+		}
+
+		return version_compare( $current_version, MLGP_VERSION, '<' );
 	}
 
 	/**
@@ -142,20 +161,48 @@ final class Installer {
 	public static function maybe_upgrade(): void {
 		$current_version = (string) get_option( 'mlgp_version', '' );
 
-		if ( in_array( $current_version, [ '0.22.0', '0.22.1' ], true ) ) {
-			$settings = (array) get_option( 'mlgp_settings', [] );
-
-			if ( empty( $settings['enable_lightbox'] ) ) {
-				$settings['enable_lightbox'] = 1;
-				update_option( 'mlgp_settings', $settings );
-			}
+		if ( ! self::needs_upgrade() ) {
+			return;
 		}
 
-		if ( MLGP_VERSION !== $current_version ) {
+		$lock_key = 'mlgp_upgrade_lock';
+
+		if ( get_transient( $lock_key ) ) {
+			return;
+		}
+
+		set_transient( $lock_key, 1, 5 * MINUTE_IN_SECONDS );
+
+		try {
+			if ( in_array( $current_version, [ '0.22.0', '0.22.1' ], true ) ) {
+				$settings = (array) get_option( 'mlgp_settings', [] );
+
+				if ( empty( $settings['enable_lightbox'] ) ) {
+					$settings['enable_lightbox'] = 1;
+					update_option( 'mlgp_settings', $settings );
+				}
+			}
+
 			self::activate();
+		} finally {
+			delete_transient( $lock_key );
+		}
+	}
+
+	/**
+	 * Runs stale install cleanup at most once per plugin version.
+	 *
+	 * @return void
+	 */
+	private static function cleanup_old_installations_once(): void {
+		$cleanup_version = (string) get_option( 'mlgp_cleanup_version', '' );
+
+		if ( MLGP_VERSION === $cleanup_version ) {
+			return;
 		}
 
 		self::cleanup_old_installations();
+		update_option( 'mlgp_cleanup_version', MLGP_VERSION );
 	}
 	/**
 	 * Removes stale plugin directories created by past installs.

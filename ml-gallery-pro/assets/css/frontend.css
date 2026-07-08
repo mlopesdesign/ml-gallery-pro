@@ -189,6 +189,7 @@
 	display: grid;
 	gap: 8px;
 	min-width: 0;
+	min-height: 120px;
 }
 
 .mlgp-gallery-filters__field label {
@@ -1131,6 +1132,12 @@
 	box-shadow: 0 12px 22px rgba(15, 118, 110, 0.22);
 }
 
+/* ── Lightbox overlay ──────────────────────────────────────────────────── */
+
+body.mlgp-lightbox-open {
+	overflow: hidden;
+}
+
 .mlgp-lightbox {
 	position: fixed;
 	inset: 0;
@@ -1139,23 +1146,42 @@
 	align-items: center;
 	justify-content: center;
 	padding: 28px;
-	background: rgba(12, 18, 29, 0.88);
+	background: rgba(12, 18, 29, 0.92);
+	--mlgp-lightbox-radius: 4px;
 }
 
 .mlgp-lightbox.is-active {
 	display: flex;
 }
 
+/* Dialog: prev | stage | next */
 .mlgp-lightbox__dialog {
 	position: relative;
-	max-width: min(1100px, 100%);
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	max-width: min(1200px, 100%);
 	max-height: 100%;
+	width: 100%;
 }
 
+/* Stage holds the image */
+.mlgp-lightbox__stage {
+	position: relative;
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 0;
+	min-height: 120px;
+}
+
+/* Close button — top-right of stage */
 .mlgp-lightbox__close {
 	position: absolute;
 	top: -18px;
 	right: -18px;
+	z-index: 2;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -1166,22 +1192,129 @@
 	background: #fff;
 	color: #0f172a;
 	cursor: pointer;
-	font-size: 20px;
-	line-height: 1;
+	padding: 0;
+	transition: background 0.15s, color 0.15s;
 }
 
+.mlgp-lightbox__close:hover {
+	background: #f1f5f9;
+	color: #e11d48;
+}
+
+/* Prev / Next navigation buttons */
+.mlgp-lightbox__prev,
+.mlgp-lightbox__next {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 52px;
+	height: 52px;
+	border: 2px solid rgba(255, 255, 255, 0.25);
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.1);
+	color: #fff;
+	cursor: pointer;
+	padding: 0;
+	transition: background 0.15s, border-color 0.15s;
+	z-index: 2;
+}
+
+.mlgp-lightbox__prev:hover,
+.mlgp-lightbox__next:hover {
+	background: rgba(255, 255, 255, 0.22);
+	border-color: rgba(255, 255, 255, 0.55);
+}
+
+.mlgp-lightbox__prev[hidden],
+.mlgp-lightbox__next[hidden] {
+	display: none;
+}
+
+/* Image */
 .mlgp-lightbox__image {
+	display: block !important;
+	position: relative !important;
+	z-index: 1;
+	width: auto !important;
+	height: auto !important;
+	max-width: 100% !important;
+	max-height: calc(100vh - 160px) !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	opacity: 1 !important;
+	visibility: visible !important;
+	transform: none !important;
+	filter: none !important;
+	clip: auto !important;
+	clip-path: none !important;
+	border-radius: var(--mlgp-lightbox-radius);
+	box-shadow: 0 24px 50px rgba(0, 0, 0, 0.45);
+	object-fit: contain !important;
+}
+
+.mlgp-lightbox.is-loading .mlgp-lightbox__image,
+.mlgp-lightbox.has-error .mlgp-lightbox__image {
+	visibility: hidden !important;
+}
+
+.mlgp-lightbox__loader {
+	display: none;
+	position: absolute;
+	width: 44px;
+	height: 44px;
+	border: 4px solid rgba(255, 255, 255, 0.25);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: mlgp-lightbox-spin 0.8s linear infinite;
+}
+
+.mlgp-lightbox.is-loading .mlgp-lightbox__loader {
 	display: block;
-	max-width: 100%;
-	max-height: calc(100vh - 120px);
-	border-radius: max(0px, calc(var(--mlgp-card-radius) - 2px));
-	box-shadow: 0 24px 50px rgba(0, 0, 0, 0.35);
+}
+
+.mlgp-lightbox__error {
+	display: none;
+	max-width: 420px;
+	padding: 18px 22px;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 8px;
+	background: rgba(15, 23, 42, 0.88);
+	color: #fff;
+	text-align: center;
+}
+
+.mlgp-lightbox.has-error .mlgp-lightbox__error {
+	display: block;
+}
+
+@keyframes mlgp-lightbox-spin {
+	to { transform: rotate(360deg); }
+}
+
+/* Footer: caption + counter */
+.mlgp-lightbox__footer {
+	position: absolute;
+	bottom: -44px;
+	left: 0;
+	right: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 18px;
 }
 
 .mlgp-lightbox__caption {
-	margin-top: 14px;
 	color: #f8fafc;
 	text-align: center;
+	font-size: 14px;
+}
+
+.mlgp-lightbox__counter {
+	color: rgba(248, 250, 252, 0.6);
+	font-size: 13px;
+	white-space: nowrap;
 }
 
 .mlgp-pagination {
@@ -1446,12 +1579,30 @@
 	}
 
 	.mlgp-lightbox {
-		padding: 18px;
+		padding: 12px;
+	}
+
+	.mlgp-lightbox__dialog {
+		gap: 6px;
+	}
+
+	.mlgp-lightbox__prev,
+	.mlgp-lightbox__next {
+		width: 38px;
+		height: 38px;
 	}
 
 	.mlgp-lightbox__close {
-		top: 10px;
-		right: 10px;
+		top: 8px;
+		right: 8px;
+	}
+
+	.mlgp-lightbox__image {
+		max-height: calc(100vh - 120px);
+	}
+
+	.mlgp-lightbox__footer {
+		bottom: -36px;
 	}
 }
 

@@ -414,11 +414,15 @@ final class Admin {
 	public function add_editor_buttons(): void {
 		$screen = get_current_screen();
 
-		if ( ! $screen || ! in_array( $screen->base, [ 'post', 'page' ], true ) ) {
-			// Also allow if it's a custom post type that supports editor.
-			if ( ! post_type_supports( get_post_type(), 'editor' ) ) {
-				return;
-			}
+		if ( ! $screen ) {
+			return;
+		}
+
+		$is_post_editor_screen = in_array( $screen->base, [ 'post', 'page' ], true );
+		$is_cpt_editor         = ! $is_post_editor_screen && post_type_supports( (string) get_post_type(), 'editor' );
+
+		if ( ! $is_post_editor_screen && ! $is_cpt_editor ) {
+			return;
 		}
 
 		printf(
@@ -457,11 +461,11 @@ final class Admin {
 
 		$gallery = $this->repository->save_gallery(
 			[
-				'id'          => isset( $_POST['id'] ) ? wp_unslash( $_POST['id'] ) : '',
-				'title'       => isset( $_POST['title'] ) ? wp_unslash( $_POST['title'] ) : '',
-				'slug'        => isset( $_POST['slug'] ) ? wp_unslash( $_POST['slug'] ) : '',
-				'description' => isset( $_POST['description'] ) ? wp_unslash( $_POST['description'] ) : '',
-				'status'      => isset( $_POST['status'] ) ? wp_unslash( $_POST['status'] ) : 'draft',
+				'id'          => isset( $_POST['id'] ) ? absint( wp_unslash( $_POST['id'] ) ) : 0,
+				'title'       => isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '',
+				'slug'        => isset( $_POST['slug'] ) ? sanitize_title( wp_unslash( $_POST['slug'] ) ) : '',
+				'description' => isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '',
+				'status'      => isset( $_POST['status'] ) ? sanitize_key( wp_unslash( $_POST['status'] ) ) : 'draft',
 			]
 		);
 
@@ -506,11 +510,11 @@ final class Admin {
 
 		$album = $this->repository->save_album(
 			[
-				'id'          => isset( $_POST['id'] ) ? wp_unslash( $_POST['id'] ) : '',
-				'title'       => isset( $_POST['title'] ) ? wp_unslash( $_POST['title'] ) : '',
-				'slug'        => isset( $_POST['slug'] ) ? wp_unslash( $_POST['slug'] ) : '',
-				'description' => isset( $_POST['description'] ) ? wp_unslash( $_POST['description'] ) : '',
-				'status'      => isset( $_POST['status'] ) ? wp_unslash( $_POST['status'] ) : 'draft',
+				'id'          => isset( $_POST['id'] ) ? absint( wp_unslash( $_POST['id'] ) ) : 0,
+				'title'       => isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '',
+				'slug'        => isset( $_POST['slug'] ) ? sanitize_title( wp_unslash( $_POST['slug'] ) ) : '',
+				'description' => isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '',
+				'status'      => isset( $_POST['status'] ) ? sanitize_key( wp_unslash( $_POST['status'] ) ) : 'draft',
 			]
 		);
 

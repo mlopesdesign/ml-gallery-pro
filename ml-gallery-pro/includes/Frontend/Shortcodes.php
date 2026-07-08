@@ -30,6 +30,16 @@ final class Shortcodes {
 	private $routed_gallery = null;
 
 	/**
+	 * Maximum accepted MLGP public query args per request.
+	 */
+	private const MAX_PUBLIC_QUERY_ARGS = 20;
+
+	/**
+	 * Maximum accepted frontend page number.
+	 */
+	private const MAX_FRONTEND_PAGE = 9999;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Repository $repository Shared repository.
@@ -931,7 +941,81 @@ final class Shortcodes {
 	 * @return string
 	 */
 	private function build_pagination_key( string $context, string $suffix ): string {
-		return sanitize_key( 'mlgp_page_' . $context . '_' . $suffix );
+		$context = in_array( $context, [ 'gallery', 'album', 'tag' ], true ) ? $context : 'gallery';
+		$suffix  = preg_replace( '/[^a-zA-Z0-9_-]/', '', $suffix );
+
+		return sanitize_key( 'mlgp_page_' . $context . '_' . substr( (string) $suffix, 0, 32 ) );
+	}
+
+	/**
+	 * Checks if one MLGP public query key is valid and not part of an abusive request.
+	 *
+	 * @param string $query_key Query arg key.
+	 * @return bool
+	 */
+	private function is_allowed_public_query_key( string $query_key ): bool {
+		if ( ! preg_match( '/^mlgp_(?:album_view_\d{1,10}|page_(?:gallery|album|tag)_[a-z0-9_-]{1,32})$/', $query_key ) ) {
+			return false;
+		}
+
+		$public_keys = $this->get_mlgp_public_query_keys();
+
+		if ( count( $public_keys ) > self::MAX_PUBLIC_QUERY_ARGS ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Returns MLGP public query keys present in the current request.
+	 *
+	 * @return array<int, string>
+	 */
+	private function get_mlgp_public_query_keys(): array {
+		$keys = [];
+
+		foreach ( array_keys( $_GET ) as $key ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$key = is_scalar( $key ) ? (string) $key : '';
+
+			if ( preg_match( '/^mlgp_(?:album_view_|page_(?:gallery|album|tag)_)/', $key ) ) {
+				$keys[] = $key;
+			}
+		}
+
+		return $keys;
+	}
+
+	/**
+	 * Returns invalid or excess MLGP public query keys to strip from generated URLs.
+	 *
+	 * @return array<int, string>
+	 */
+	private function get_invalid_or_excess_public_query_keys(): array {
+		$keys = $this->get_mlgp_public_query_keys();
+
+		if ( empty( $keys ) ) {
+			return [];
+		}
+
+		$strip = [];
+
+		foreach ( $keys as $key ) {
+			$value = $_GET[ $key ] ?? ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$valid = preg_match( '/^mlgp_album_view_\d{1,10}$/', $key )
+				? is_scalar( $value ) && preg_match( '/^(?:album|gallery)-\d{1,10}$/', (string) wp_unslash( $value ) )
+				: preg_match( '/^mlgp_page_(?:gallery|album|tag)_[a-z0-9_-]{1,32}$/', $key ) && is_scalar( $value ) && preg_match( '/^\d{1,4}$/', (string) wp_unslash( $value ) );
+
+			if ( ! $valid ) {
+				$strip[] = $key;
+			}
+		}
+
+		if ( count( $keys ) > self::MAX_PUBLIC_QUERY_ARGS ) {
+			$strip = array_merge( $strip, $keys );
+		}
+
+		return array_values( array_unique( $strip ) );
 	}
 
 	/**
@@ -944,11 +1028,15 @@ final class Shortcodes {
 	private function resolve_current_page( $requested, string $query_key ): int {
 		$page = absint( $requested );
 
-		if ( $page < 1 && isset( $_GET[ $query_key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$page = absint( wp_unslash( $_GET[ $query_key ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( $page < 1 && $this->is_allowed_public_query_key( $query_key ) && isset( $_GET[ $query_key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$raw_page = wp_unslash( $_GET[ $query_key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+			if ( is_scalar( $raw_page ) && preg_match( '/^\d{1,4}$/', (string) $raw_page ) ) {
+				$page = absint( $raw_page );
+			}
 		}
 
-		return max( 1, $page );
+		return min( self::MAX_FRONTEND_PAGE, max( 1, $page ) );
 	}
 
 	/**
@@ -1072,8 +1160,14 @@ final class Shortcodes {
 	 */
 	private function current_request_url(): string {
 		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( (string) $_SERVER['REQUEST_URI'] ) : '/'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$url         = home_url( $request_uri );
+		$strip_keys  = $this->get_invalid_or_excess_public_query_keys();
 
-		return home_url( $request_uri );
+		if ( ! empty( $strip_keys ) ) {
+			$url = remove_query_arg( $strip_keys, $url );
+		}
+
+		return $url;
 	}
 
 	/**
@@ -1813,6 +1907,7 @@ final class Shortcodes {
 		$media        = isset( $item['attachment'] ) && is_array( $item['attachment'] ) ? $item['attachment'] : null;
 		$image_markup = $media ? $this->render_media_image( $media, $item, $config, $size ) : '';
 		$image_url    = $media['full_url'] ?? '';
+		$preview_url  = ! empty( $media['large_url'] ) ? (string) $media['large_url'] : (string) $image_url;
 		$caption      = ! empty( $item['item_caption'] ) ? wp_strip_all_tags( (string) $item['item_caption'] ) : '';
 		$item_link    = ! empty( $item['item_link'] ) ? esc_url( (string) $item['item_link'] ) : '';
 		$wrapper_url  = ! empty( $config['enable_lightbox'] ) ? $image_url : $item_link;
@@ -1823,11 +1918,12 @@ final class Shortcodes {
 
 		if ( $wrapper_url ) {
 			return sprintf(
-				'<a href="%1$s" class="%2$s" %3$s data-caption="%4$s">%5$s</a>',
+				'<a href="%1$s" class="%2$s" %3$s data-caption="%4$s" data-mlgp-preview-src="%5$s">%6$s</a>',
 				esc_url( $wrapper_url ),
 				esc_attr( $media_class ),
 				! empty( $config['enable_lightbox'] ) ? 'data-mlgp-lightbox="1"' : '',
 				esc_attr( $caption ),
+				esc_url( $preview_url ),
 				$image_markup
 			);
 		}
@@ -1918,9 +2014,17 @@ final class Shortcodes {
 	 */
 	private function resolve_album_view( int $root_album_id ): array {
 		$query_key = $this->build_album_view_key( $root_album_id );
-		$raw       = isset( $_GET[ $query_key ] ) ? sanitize_text_field( wp_unslash( $_GET[ $query_key ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$raw       = '';
 
-		if ( preg_match( '/^(album|gallery)-(\d+)$/', $raw, $matches ) ) {
+		if ( $this->is_allowed_public_query_key( $query_key ) && isset( $_GET[ $query_key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$raw_value = wp_unslash( $_GET[ $query_key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+			if ( is_scalar( $raw_value ) ) {
+				$raw = sanitize_text_field( (string) $raw_value );
+			}
+		}
+
+		if ( preg_match( '/^(album|gallery)-(\d{1,10})$/', $raw, $matches ) ) {
 			return [
 				'type' => $matches[1],
 				'id'   => absint( $matches[2] ),
