@@ -137,7 +137,10 @@ final class Repository {
 				return "ORDER BY {$alias}.id DESC";
 
 			case 'manual':
-				return "ORDER BY {$alias}.sort_order ASC, {$alias}.id ASC";
+				// id DESC in the secondary key keeps the most recent galleries
+				// at the top while sort_order is being populated (backfill or
+				// brand-new install), so the list never goes id ASC by accident.
+				return "ORDER BY {$alias}.sort_order ASC, {$alias}.id DESC";
 
 			case 'updated_at_desc':
 			default:

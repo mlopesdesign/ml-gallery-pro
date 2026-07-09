@@ -10,6 +10,19 @@ with this file.
 
 ---
 
+## [0.26.18] - 2026-07-09
+
+### Fixed
+- Backfill de `sort_order` agora roda em qualquer atualização para 0.26.17+ (a condition anterior era `< 0.26.16` e ignorava sites que já estavam em v0.26.16).
+- Desempate do modo `manual` mudou de `id ASC` para `id DESC`, mantendo mais recente no topo quando o `sort_order` ainda não foi populado (defesa em profundidade).
+
+### Compatibility
+- Mantém todos os fluxos existentes: criação, edição, exclusão, capas, importação, shortcodes e licença.
+- Preserva slug `ml-gallery-pro`, pasta raiz e arquivo principal.
+- Compatível com atualização por cima da v0.26.17 sem perder configurações.
+
+---
+
 ## [0.26.17] - 2026-07-09
 
 ### Fixed

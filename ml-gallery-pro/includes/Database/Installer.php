@@ -246,7 +246,7 @@ final class Installer {
 				}
 			}
 
-			if ( version_compare( $current_version, '0.26.16', '<' ) ) {
+			if ( version_compare( $current_version, '0.26.17', '<' ) ) {
 				self::backfill_gallery_sort_order();
 			}
 

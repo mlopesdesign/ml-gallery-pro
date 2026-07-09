@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.26.17
+Stable tag: 0.26.18
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,11 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+
+= 0.26.18 =
+* Correcao da ordem manual: backup do `sort_order` agora roda para qualquer update para 0.26.17+ (a condition anterior cobria apenas < 0.26.16 e perdia sites em 0.26.16).
+* Mudanca no desempate do modo `manual` no SQL para `id DESC`, mantendo mais recente no topo enquanto o `sort_order` ainda nao foi preenchido.
+* Idempotencia do backfill mantida via option `mlgp_gallery_sort_order_backfilled`.
 
 = 0.26.17 =
 * Habilita drag-and-drop de galerias por padrao: o modo "Manual (arrastar)" passa a ser o inicial do admin.
