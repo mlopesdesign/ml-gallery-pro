@@ -49,6 +49,7 @@ final class Ajax {
 	public function hooks(): void {
 		add_action( 'wp_ajax_mlgp_get_dashboard', [ $this, 'get_dashboard' ] );
 		add_action( 'wp_ajax_mlgp_list_galleries', [ $this, 'list_galleries' ] );
+		add_action( 'wp_ajax_mlgp_reorder_galleries', [ $this, 'reorder_galleries' ] );
 		add_action( 'wp_ajax_mlgp_get_gallery_editor', [ $this, 'get_gallery_editor' ] );
 		add_action( 'wp_ajax_mlgp_save_gallery', [ $this, 'save_gallery' ] );
 		add_action( 'wp_ajax_mlgp_create_gallery_with_uploads', [ $this, 'create_gallery_with_uploads' ] );
@@ -171,6 +172,40 @@ final class Ajax {
 			[
 				'items'     => $this->repository->get_galleries( $sort_mode ),
 				'sort_mode' => $sort_mode,
+			]
+		);
+	}
+
+	/**
+	 * Persists a manual ordering of galleries.
+	 *
+	 * @return void
+	 */
+	public function reorder_galleries(): void {
+		$this->authorize();
+
+		$ids      = array_map( 'absint', $this->decode_json_array( $this->post( 'ids' ) ) );
+		$updated  = $this->repository->reorder_galleries( $ids );
+
+		if ( is_wp_error( $updated ) ) {
+			wp_send_json_error(
+				[
+					'message' => $updated->get_error_message(),
+				],
+				422
+			);
+		}
+
+		// Persist the manual sort mode preference for the current user so the
+		// next list render keeps the freshly chosen order.
+		update_user_meta( get_current_user_id(), 'mlgp_gallery_sort_mode', 'manual' );
+
+		wp_send_json_success(
+			[
+				'updated'     => (int) $updated,
+				'sort_mode'   => 'manual',
+				'items'       => $this->repository->get_galleries( 'manual' ),
+				'message'     => __( 'Ordem das galerias salva com sucesso.', 'ml-gallery-pro' ),
 			]
 		);
 	}

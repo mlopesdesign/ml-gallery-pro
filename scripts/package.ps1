@@ -53,14 +53,110 @@ $zipPath     = Join-Path $distDir $zipName
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 
-# Lista de arquivos (com exclusoes)
-$exclude = @('\/\.git(\/|$)', '\\\.(DS_Store|log)$', '\/Thumbs\.db$', '\/Desktop\.ini$', '\\\.(log|swp|swo|idea|vscode)', '\/node_modules\/', '\/vendor\/', '\.zip$')
-$files = @(Get-ChildItem -Path $pluginDir -Recurse -File | Where-Object {
-    $p = $_.FullName
-    -not ($exclude | Where-Object { $p -match $_ })
-} | Select-Object -ExpandProperty FullName)
+# Build a staging copy of the plugin folder so we can drop the ZIP root at
+# "ml-gallery-pro/" (required by AGENT_RULES) without nesting ml-gallery-pro/
+# inside itself. Compress-Archive cannot exclude entries on its own, so we
+# stage a clean tree first and then archive it.
+$parentDir  = Split-Path $pluginDir -Parent
+$folderName = Split-Path $pluginDir -Leaf
+$stageDir   = Join-Path $env:TEMP ("mlgp-stage-" + [Guid]::NewGuid().ToString('N'))
+$stagePlugin = Join-Path $stageDir $folderName
+New-Item -ItemType Directory -Force -Path $stagePlugin | Out-Null
 
-Compress-Archive -Path $files -DestinationPath $zipPath -CompressionLevel Optimal
+# Exclusion patterns applied relative to the staging root.
+$exclude = @(
+    '\.git(/|\\|$)',
+    '\.DS_Store$',
+    'Thumbs\.db$',
+    'Desktop\.ini$',
+    '\.log$',
+    '\.swp$',
+    '\.swo$',
+    'node_modules(/|\\|$)',
+    'vendor(/|\\|$)',
+    '\.zip$'
+)
+
+function Test-Excluded([string]$relative) {
+    foreach ($pattern in $exclude) {
+        if ($relative -match $pattern) { return $true }
+    }
+    return $false
+}
+
+Get-ChildItem -Path $pluginDir -Recurse -Force | ForEach-Object {
+    $relative = $_.FullName.Substring($pluginDir.Length).TrimStart('\', '/')
+    if ([string]::IsNullOrEmpty($relative)) { return }
+    if (Test-Excluded $relative) { return }
+
+    $target = Join-Path $stagePlugin $relative
+    if ($_.PSIsContainer) {
+        New-Item -ItemType Directory -Force -Path $target | Out-Null
+    } else {
+        $targetDir = Split-Path $target -Parent
+        if (-not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+        }
+        Copy-Item -LiteralPath $_.FullName -Destination $target -Force
+    }
+}
+
+Push-Location $stageDir
+try {
+    Compress-Archive -Path $folderName -DestinationPath $zipPath -CompressionLevel Optimal
+} finally {
+    Pop-Location
+}
+
+# Windows PowerShell writes entry paths with "\" separators; the rest of the
+# release pipeline (and the WP plugin uploader) expects POSIX "/" separators.
+# Normalize every entry name and add explicit directory entries to match the
+# structure of previous releases (the WordPress uploader and CI tooling expect
+# to see every folder as its own entry).
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$tempZip = $zipPath + ".tmp"
+$source   = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+$dest     = [System.IO.Compression.ZipFile]::Open($tempZip, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    $seenDirs = New-Object 'System.Collections.Generic.HashSet[string]'
+
+    foreach ($entry in $source.Entries) {
+        $normalized = $entry.FullName -replace '\\', '/'
+
+        # Emit explicit directory entries for every folder in the path so the
+        # resulting archive mirrors the layout produced by the bash packager.
+        $parts = $normalized.Split('/')
+        for ($i = 0; $i -lt $parts.Length - 1; $i++) {
+            $dirPath = ($parts[0..$i] -join '/') + '/'
+            if ($seenDirs.Add($dirPath)) {
+                $dest.CreateEntry($dirPath)
+            }
+        }
+
+        # If the source entry is itself a directory, skip writing it again
+        # (we already created the explicit entry above).
+        if ($normalized.EndsWith('/')) {
+            continue
+        }
+
+        $writer = $dest.CreateEntry($normalized, [System.IO.Compression.CompressionLevel]::Optimal)
+        $readerStream = $entry.Open()
+        $writerStream = $writer.Open()
+        try {
+            $readerStream.CopyTo($writerStream)
+        } finally {
+            $readerStream.Dispose()
+            $writerStream.Dispose()
+        }
+    }
+} finally {
+    $source.Dispose()
+    $dest.Dispose()
+}
+Remove-Item -LiteralPath $zipPath -Force
+Move-Item -LiteralPath $tempZip -Destination $zipPath -Force
+
+Remove-Item -LiteralPath $stageDir -Recurse -Force
 
 $sha  = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash
 $size = (Get-Item $zipPath).Length

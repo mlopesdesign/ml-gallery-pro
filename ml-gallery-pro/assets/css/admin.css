@@ -3280,6 +3280,65 @@ body.admin-bar .mlgp-notice-stack {
 	white-space: nowrap;
 }
 
+.mlgp-gallery-admin-row {
+	position: relative;
+	transition: box-shadow 120ms ease, background-color 120ms ease, opacity 120ms ease;
+}
+
+.mlgp-gallery-admin-row--reorderable {
+	cursor: default;
+}
+
+.mlgp-gallery-admin-row--reorderable .mlgp-drag-handle,
+.mlgp-gallery-admin-row--reorderable [data-mlgp-move-gallery] {
+	cursor: grab;
+}
+
+.mlgp-gallery-admin-row--reorderable .mlgp-drag-handle:active,
+.mlgp-gallery-admin-row--reorderable [data-mlgp-move-gallery]:active {
+	cursor: grabbing;
+}
+
+.mlgp-gallery-admin-row__reorder {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	justify-self: start;
+	align-self: stretch;
+}
+
+.mlgp-gallery-admin-row__reorder-buttons {
+	display: inline-flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.mlgp-gallery-admin-row__reorder .mlgp-icon-button {
+	width: 28px;
+	height: 24px;
+	border-radius: 8px;
+	font-size: 11px;
+	line-height: 1;
+	padding: 0;
+}
+
+.mlgp-gallery-admin-row__drag-handle {
+	width: 32px;
+	height: 40px;
+	font-size: 14px;
+	letter-spacing: -2px;
+}
+
+.mlgp-gallery-admin-row.is-dragging {
+	opacity: 0.55;
+	box-shadow: 0 0 0 2px var(--mlgp-brand, #2563eb) inset;
+}
+
+.mlgp-gallery-admin-row.is-drop-target {
+	box-shadow: 0 -3px 0 0 var(--mlgp-brand, #2563eb) inset;
+	background: rgba(37, 99, 235, 0.06);
+}
+
 @media screen and (max-width: 768px) {
 	.mlgp-gallery-admin-toolbar {
 		align-items: stretch;

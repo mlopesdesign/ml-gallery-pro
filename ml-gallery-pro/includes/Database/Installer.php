@@ -42,12 +42,14 @@ final class Installer {
 			settings_json LONGTEXT NULL,
 			created_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
 			published_at DATETIME NULL,
+			sort_order BIGINT UNSIGNED NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY slug (slug),
 			KEY status (status),
 			KEY published_at (published_at),
+			KEY sort_order (sort_order),
 			KEY updated_at (updated_at)
 		) {$charset_collate};";
 

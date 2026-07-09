@@ -141,6 +141,8 @@ if (root || config.isPostEditor) {
 		},
 		selectedGalleryIds: [],
 		selectedAlbumIds: [],
+		galleryDragId: 0,
+		galleryReorderInFlight: false,
 	};
 	const mediaFrames = {};
 
@@ -234,6 +236,11 @@ if (root || config.isPostEditor) {
 			["updated_at_desc", "Ordenar: Modificação ↓"],
 			["updated_at_asc", "Ordenar: Modificação ↑"],
 		];
+
+		if (type === "gallery") {
+			options.push(["manual", "Ordenar: Manual (arrastar)"]);
+		}
+
 		const attr = type === "album" ? "data-mlgp-album-sort" : "data-mlgp-gallery-sort";
 		const value = selectedValue || "id_desc";
 
@@ -1019,9 +1026,25 @@ if (root || config.isPostEditor) {
 			? `<div class="mlgp-gallery-admin-row__thumb"><img src="${escapeHtml(item.cover.thumb_url)}" alt="${escapeHtml(item.title || "")}"></div>`
 			: `<div class="mlgp-gallery-admin-row__thumb is-empty">GAL</div>`;
 		const statusLabel = galleryStatusLabel(item.status);
+		const isManualSort = (state.sorting && state.sorting.galleries) === "manual";
+		const reorderControls = isManualSort
+			? `
+				<div class="mlgp-gallery-admin-row__reorder">
+					<span class="mlgp-drag-handle mlgp-gallery-admin-row__drag-handle" draggable="true" data-mlgp-gallery-drag-handle="${Number(item.id || 0)}" title="Arraste para reordenar" aria-label="Reordenar galeria">⋮⋮</span>
+					<div class="mlgp-gallery-admin-row__reorder-buttons">
+						<button type="button" class="mlgp-icon-button" data-mlgp-move-gallery="${Number(item.id || 0)}" data-direction="up" title="Mover para cima" aria-label="Mover para cima">▲</button>
+						<button type="button" class="mlgp-icon-button" data-mlgp-move-gallery="${Number(item.id || 0)}" data-direction="down" title="Mover para baixo" aria-label="Mover para baixo">▼</button>
+					</div>
+				</div>
+			`
+			: "";
+		const itemClasses = isManualSort
+			? "mlgp-list__item mlgp-list__item--selectable mlgp-gallery-admin-row mlgp-gallery-admin-row--reorderable"
+			: "mlgp-list__item mlgp-list__item--selectable mlgp-gallery-admin-row";
 
 		return `
-			<div class="mlgp-list__item mlgp-list__item--selectable mlgp-gallery-admin-row">
+			<div class="${itemClasses}" data-mlgp-gallery-row="${Number(item.id || 0)}">
+				${reorderControls}
 				<label class="mlgp-check mlgp-check--row">
 					<input type="checkbox" data-mlgp-select-gallery="${Number(item.id || 0)}" ${isGallerySelected(item.id) ? "checked" : ""}>
 					<span>Selecionar</span>
@@ -2914,6 +2937,93 @@ if (root || config.isPostEditor) {
 		return response;
 	}
 
+	function clearGalleryDragState() {
+		state.galleryDragId = 0;
+		root.querySelectorAll(".mlgp-gallery-admin-row.is-dragging,.mlgp-gallery-admin-row.is-drop-target").forEach((row) => {
+			row.classList.remove("is-dragging", "is-drop-target");
+		});
+	}
+
+	function reorderGalleryRows(sourceId, targetId) {
+		const numericSource = Number(sourceId || 0);
+		const numericTarget = Number(targetId || 0);
+
+		if (!numericSource || !numericTarget || numericSource === numericTarget) {
+			return;
+		}
+
+		const items = [...(state.galleries || [])];
+		const sourceIndex = items.findIndex((item) => Number(item.id) === numericSource);
+		const targetIndex = items.findIndex((item) => Number(item.id) === numericTarget);
+
+		if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+			return;
+		}
+
+		const [moving] = items.splice(sourceIndex, 1);
+		const insertIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+		items.splice(insertIndex, 0, moving);
+		state.galleries = items;
+		state.sorting.galleries = "manual";
+		renderGalleries();
+		persistGalleryManualOrder(items);
+	}
+
+	function moveGallery(galleryId, direction) {
+		if (state.galleryReorderInFlight) {
+			return;
+		}
+
+		const numericId = Number(galleryId || 0);
+		const items = [...(state.galleries || [])];
+		const index = items.findIndex((item) => Number(item.id) === numericId);
+
+		if (index < 0) {
+			return;
+		}
+
+		const targetIndex = direction === "up" ? index - 1 : index + 1;
+
+		if (targetIndex < 0 || targetIndex >= items.length) {
+			return;
+		}
+
+		const swap = items[index];
+		items[index] = items[targetIndex];
+		items[targetIndex] = swap;
+		state.galleries = items;
+		state.sorting.galleries = "manual";
+		renderGalleries();
+		persistGalleryManualOrder(items);
+	}
+
+	async function persistGalleryManualOrder(items) {
+		if (state.galleryReorderInFlight) {
+			return;
+		}
+
+		const ids = (items || state.galleries || []).map((item) => Number(item.id || 0)).filter((id) => id > 0);
+
+		if (!ids.length) {
+			return;
+		}
+
+		state.galleryReorderInFlight = true;
+
+		try {
+			const response = await request("mlgp_reorder_galleries", { ids: JSON.stringify(ids) });
+			state.galleries = response.items || state.galleries;
+			state.sorting.galleries = response.sort_mode || "manual";
+			renderGalleries();
+		} catch (error) {
+			showNotice(error.message || config.strings.genericError || "Falha ao reordenar galerias.", "error");
+			await loadGalleries(false);
+			renderGalleries();
+		} finally {
+			state.galleryReorderInFlight = false;
+		}
+	}
+
 	async function loadSettings() {
 		const response = await request("mlgp_get_settings", {});
 		state.settings = response.settings || {};
@@ -3238,6 +3348,16 @@ if (root || config.isPostEditor) {
 		if (target.dataset.mlgpGallerySearch) {
 			state.gallerySearchQuery = target.value || "";
 			renderGalleries();
+			return;
+		}
+
+		if (target.dataset.mlgpMoveGallery) {
+			if ((state.sorting && state.sorting.galleries) !== "manual") {
+				showNotice("Mude o modo de ordenacao para Manual (arrastar) para usar as setas.", "error");
+				return;
+			}
+
+			moveGallery(target.dataset.mlgpMoveGallery, target.dataset.direction || "up");
 			return;
 		}
 
@@ -3785,6 +3905,104 @@ if (root || config.isPostEditor) {
 	if (root && root.id !== "mlgp-editor-picker-root") {
 		root.addEventListener("input", handleRootFieldChange);
 		root.addEventListener("change", handleRootFieldChange);
+		root.addEventListener("dragstart", (event) => {
+			if (!(event.target instanceof Element)) {
+				return;
+			}
+
+			const handle = event.target.closest("[data-mlgp-gallery-drag-handle]");
+
+			if (!handle) {
+				return;
+			}
+
+			const galleryId = Number(handle.dataset.mlgpGalleryDragHandle || 0);
+			const row = handle.closest("[data-mlgp-gallery-row]");
+
+			if (!galleryId || !row) {
+				return;
+			}
+
+			state.galleryDragId = galleryId;
+			row.classList.add("is-dragging");
+
+			if (event.dataTransfer) {
+				event.dataTransfer.effectAllowed = "move";
+				event.dataTransfer.setData("text/plain", String(galleryId));
+			}
+		});
+
+		root.addEventListener("dragover", (event) => {
+			if (!state.galleryDragId) {
+				return;
+			}
+
+			event.preventDefault();
+
+			if (event.dataTransfer) {
+				event.dataTransfer.dropEffect = "move";
+			}
+
+			const target = event.target instanceof Element ? event.target.closest("[data-mlgp-gallery-row]") : null;
+
+			if (!target) {
+				return;
+			}
+
+			const targetId = Number(target.dataset.mlgpGalleryRow || 0);
+
+			if (!targetId || targetId === state.galleryDragId) {
+				return;
+			}
+
+			root.querySelectorAll(".mlgp-gallery-admin-row.is-drop-target").forEach((row) => {
+				if (row !== target) {
+					row.classList.remove("is-drop-target");
+				}
+			});
+
+			target.classList.add("is-drop-target");
+		});
+
+		root.addEventListener("dragleave", (event) => {
+			if (!state.galleryDragId) {
+				return;
+			}
+
+			const target = event.target instanceof Element ? event.target.closest("[data-mlgp-gallery-row]") : null;
+
+			if (target) {
+				target.classList.remove("is-drop-target");
+			}
+		});
+
+		root.addEventListener("drop", (event) => {
+			if (!state.galleryDragId) {
+				return;
+			}
+
+			event.preventDefault();
+			const target = event.target instanceof Element ? event.target.closest("[data-mlgp-gallery-row]") : null;
+			const dragId = state.galleryDragId;
+
+			clearGalleryDragState();
+
+			if (!target) {
+				return;
+			}
+
+			const targetId = Number(target.dataset.mlgpGalleryRow || 0);
+
+			if (!targetId || targetId === dragId) {
+				return;
+			}
+
+			reorderGalleryRows(dragId, targetId);
+		});
+
+		root.addEventListener("dragend", () => {
+			clearGalleryDragState();
+		});
 	}
 
 	document.addEventListener("keydown", (event) => {

@@ -10,6 +10,23 @@ with this file.
 
 ---
 
+## [0.26.16] - 2026-07-09
+
+### Added
+- Reordenação manual das galerias na lista do admin: novo modo "Manual (arrastar)" no seletor de ordenação.
+- Permite arrastar galerias (HTML5 Drag and Drop nativo, sem dependência) para reordenar a posição na lista e no frontend.
+- Inclui setas de subir/descer como fallback acessível dentro do modo Manual.
+- Adiciona coluna `sort_order BIGINT UNSIGNED` com índice na tabela de galerias (migração via `dbDelta`, sem perda de dados).
+- Novo endpoint AJAX `mlgp_reorder_galleries` com `nonce`, capability `manage_options` e sanitização.
+- Atualiza o `renderSortControl` para expor a opção "Manual (arrastar)" somente em galerias (álbuns seguem com os modos automáticos).
+
+### Compatibility
+- Mantém todos os fluxos existentes de criação, edição, exclusão, capas, importação, shortcodes e licença.
+- Preserva slug `ml-gallery-pro`, pasta raiz e arquivo principal.
+- Compatível com atualização por cima da v0.26.15 sem perder configurações.
+
+---
+
 ## [0.26.15] - 2026-07-02
 
 ### Fixed

@@ -71,6 +71,7 @@ final class Repository {
 			'created_at_asc'  => 'created_at ASC',
 			'updated_at_desc' => 'updated_at DESC',
 			'updated_at_asc'  => 'updated_at ASC',
+			'manual'          => 'sort_order ASC, id ASC',
 		];
 	}
 
@@ -112,6 +113,9 @@ final class Repository {
 
 			case 'id_desc':
 				return "ORDER BY {$alias}.id DESC";
+
+			case 'manual':
+				return "ORDER BY {$alias}.sort_order ASC, {$alias}.id ASC";
 
 			case 'updated_at_desc':
 			default:
@@ -964,6 +968,69 @@ final class Repository {
 		}
 
 		return $deleted;
+	}
+
+	/**
+	 * Persists a manual ordering for galleries.
+	 *
+	 * @param array<int, int> $ids Ordered gallery IDs.
+	 * @return int|\WP_Error Number of galleries updated, or error.
+	 */
+	public function reorder_galleries( array $ids ) {
+		global $wpdb;
+
+		$ids = array_values( array_filter( array_map( 'absint', $ids ) ) );
+
+		if ( empty( $ids ) ) {
+			return new \WP_Error( 'mlgp_reorder_galleries_empty', __( 'Nenhuma galeria valida foi informada para reordenacao.', 'ml-gallery-pro' ) );
+		}
+
+		// Only reorder galleries the caller is allowed to touch. Limit to IDs
+		// that actually exist so unknown IDs are rejected silently instead of
+		// injecting ghost rows into the sort_order sequence.
+		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$existing     = array_map(
+			'intval',
+			$wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT id FROM {$this->table('galleries')} WHERE id IN ({$placeholders})",
+					$ids
+				)
+			) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		);
+
+		$valid_ids = array_values( array_intersect( $ids, $existing ) );
+
+		if ( count( $valid_ids ) !== count( $ids ) ) {
+			return new \WP_Error( 'mlgp_reorder_galleries_invalid', __( 'A lista de galerias contem IDs inexistentes.', 'ml-gallery-pro' ) );
+		}
+
+		$current_time = current_time( 'mysql' );
+		$updated      = 0;
+		$step         = 10; // gap leaves room for cheap manual edits without renumbering the whole table.
+
+		foreach ( $valid_ids as $index => $gallery_id ) {
+			$sort_order = ( $index + 1 ) * $step;
+
+			$result = $wpdb->update(
+				$this->table( 'galleries' ),
+				[
+					'sort_order' => $sort_order,
+					'updated_at' => $current_time,
+				],
+				[ 'id' => (int) $gallery_id ],
+				[ '%d', '%s' ],
+				[ '%d' ]
+			); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+
+			if ( false === $result ) {
+				return new \WP_Error( 'mlgp_reorder_galleries_failed', __( 'Nao foi possivel salvar a nova ordem das galerias.', 'ml-gallery-pro' ) );
+			}
+
+			++$updated;
+		}
+
+		return $updated;
 	}
 
 	/**

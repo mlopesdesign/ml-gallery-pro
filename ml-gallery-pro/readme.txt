@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.26.15
+Stable tag: 0.26.16
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,15 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+
+= 0.26.16 =
+* Adiciona ordenacao manual das galerias na lista do admin: novo modo "Manual (arrastar)" no seletor de ordenacao.
+* Permite arrastar galerias (HTML5 Drag and Drop nativo, sem dependencia) para reordenar a posicao na lista e no frontend.
+* Inclui setas de subir/descer como fallback acessivel dentro do modo Manual.
+* Adiciona coluna sort_order BIGINT UNSIGNED com indice na tabela de galerias (migracao via dbDelta, sem perda de dados).
+* Novo endpoint AJAX `mlgp_reorder_galleries` com nonce, capability manage_options e sanitizacao.
+* Atualiza o `renderSortControl` para expor a opcao "Manual (arrastar)" somente em galerias (albuns seguem com os modos automaticos).
+* Mantem todos os fluxos existentes de criacao, edicao, exclusao, capas, importacao, shortcodes e licenca.
 
 = 0.26.15 =
 * Corrige execucao indevida de rotinas de instalacao/upgrade em requisicoes publicas.
