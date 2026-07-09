@@ -152,6 +152,15 @@ final class Admin {
 			'mlgp-license',
 			[ $this, 'render_page' ]
 		);
+
+		$this->hook_suffixes[] = add_submenu_page(
+			'mlgp-dashboard',
+			__( 'Diagnostico', 'ml-gallery-pro' ),
+			__( 'Diagnostico', 'ml-gallery-pro' ),
+			$capability,
+			'mlgp-diagnostics',
+			[ $this, 'render_diagnostics_page' ]
+		);
 	}
 
 	/**
@@ -748,5 +757,184 @@ final class Admin {
 		unset( $item );
 
 		return $items;
+	}
+
+	/**
+	 * Renders the diagnostics page. Surfaces plugin state that affects the
+	 * gallery ordering — version, sort mode, backfill flag, and a sample of
+	 * actual sort_order values from the galleries table — to make it obvious
+	 * whether manual ordering is wired up correctly.
+	 *
+	 * @return void
+	 */
+	public function render_diagnostics_page(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Voce nao tem permissao para acessar esta pagina.', 'ml-gallery-pro' ) );
+		}
+
+		global $wpdb;
+
+		$tables          = \MLGP\Database\Installer::get_tables();
+		$galleries_table = $tables['galleries'];
+		$user_id         = get_current_user_id();
+
+		$stored_version    = (string) get_option( 'mlgp_version', '' );
+		$backfilled        = (string) get_option( 'mlgp_gallery_sort_order_backfilled', '0' );
+		$user_sort_mode    = get_user_meta( $user_id, 'mlgp_gallery_sort_mode', true );
+		$user_sort_mode    = is_string( $user_sort_mode ) ? $user_sort_mode : '';
+
+		$sample = $wpdb->get_results(
+			"SELECT id, title, sort_order FROM {$galleries_table} ORDER BY id DESC LIMIT 25"
+		);
+
+		$counts = array(
+			'total'      => 0,
+			'zero'       => 0,
+			'desc_top'   => 0,
+			'desc_other' => 0,
+			'duplicates' => 0,
+		);
+
+		if ( is_array( $sample ) ) {
+			foreach ( $sample as $row ) {
+				++$counts['total'];
+				$so = (int) $row->sort_order;
+				if ( 0 === $so ) {
+					++$counts['zero'];
+				}
+			}
+		}
+
+		$has_zero  = $counts['zero'] > 0;
+		$sort_ok   = ! $has_zero && $counts['total'] > 0;
+		$user_ok   = in_array( $user_sort_mode, \MLGP\Database\Repository::get_sort_modes(), true );
+		$auto_mode = '' !== $user_sort_mode && 'manual' !== $user_sort_mode;
+
+		// Apply the same logic as resolve_user_sort_mode to suggest what the
+		// admin page will actually render.
+		$resolved_mode = \MLGP\Database\Repository::resolve_user_sort_mode(
+			'mlgp_gallery_sort_mode',
+			\MLGP\Database\Repository::DEFAULT_GALLERY_SORT_MODE
+		);
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'ML Gallery Pro - Diagnostico', 'ml-gallery-pro' ); ?></h1>
+			<p class="description">
+				<?php esc_html_e( 'Estado interno do plugin relevante para a ordenacao manual de galerias. Use esta pagina para confirmar versao, backfill e sort_order persistido.', 'ml-gallery-pro' ); ?>
+			</p>
+
+			<table class="widefat striped" style="max-width:920px;">
+				<thead>
+					<tr>
+						<th style="width:30%;">Item</th>
+						<th>Valor</th>
+						<th style="width:15%;">Estado</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Versao instalada (MLGP_VERSION)</td>
+						<td><code><?php echo esc_html( MLGP_VERSION ); ?></code></td>
+						<td><span class="dashicons dashicons-yes"></span></td>
+					</tr>
+					<tr>
+						<td>Option <code>mlgp_version</code></td>
+						<td><code><?php echo esc_html( $stored_version ?: '(vazio)' ); ?></code></td>
+						<td><?php echo $stored_version === MLGP_VERSION ? '&#x2713;' : '&#x26A0;'; ?></td>
+					</tr>
+					<tr>
+						<td>Backfill <code>mlgp_gallery_sort_order_backfilled</code></td>
+						<td><code><?php echo esc_html( $backfilled ); ?></code></td>
+						<td><?php echo '1' === $backfilled ? '&#x2713;' : '&#x26A0;'; ?></td>
+					</tr>
+					<tr>
+						<td>Modo persistido no seu user_meta (<code>mlgp_gallery_sort_mode</code>)</td>
+						<td><code><?php echo esc_html( $user_sort_mode ?: '(vazio)' ); ?></code></td>
+						<td>
+							<?php
+							if ( '' === $user_sort_mode ) {
+								echo '&#x2713;';
+							} elseif ( 'manual' === $user_sort_mode ) {
+								echo '&#x2713;';
+							} elseif ( $user_ok && ! $auto_mode ) {
+								echo '&#x26A0;';
+							} else {
+								echo '&#x26A0;';
+							}
+							?>
+						</td>
+					</tr>
+					<tr>
+						<td>Modo que a pagina Galerias vai carregar</td>
+						<td><code><?php echo esc_html( $resolved_mode ); ?></code></td>
+						<td>
+							<?php echo 'manual' === $resolved_mode ? '&#x2713;' : '&#x26A0;'; ?>
+						</td>
+					</tr>
+					<tr>
+						<td>Amostra de galerias (<code>ORDER BY id DESC LIMIT 25</code>)</td>
+						<td><?php echo esc_html( (string) $counts['total'] ); ?> retornadas</td>
+						<td>&mdash;</td>
+					</tr>
+					<tr>
+						<td>Saude esperada</td>
+						<td>
+							<ul style="margin:0;padding-left:18px;">
+								<li>Versao em <code>mlgp_version</code> = <code><?php echo esc_html( MLGP_VERSION ); ?></code></li>
+								<li><code>backfilled</code> = 1</li>
+								<li>Modo persistido = <code>manual</code></li>
+								<li>Todas as galerias com <code>sort_order &gt; 0</code></li>
+							</ul>
+						</td>
+						<td>
+							<?php echo ( $sort_ok && 'manual' === $resolved_mode ) ? '&#x2713;' : '&#x26A0;'; ?>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+
+			<h2 style="margin-top:24px;">Amostra: <code>wp_mlgp_galleries</code></h2>
+			<?php if ( empty( $sample ) ) : ?>
+				<p><em>Nenhuma galeria cadastrada ainda.</em></p>
+			<?php else : ?>
+				<table class="widefat striped" style="max-width:920px;">
+					<thead>
+						<tr>
+							<th style="width:10%;">id</th>
+							<th style="width:60%;">title</th>
+							<th style="width:20%;">sort_order</th>
+							<th>Esperado</th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php
+						$expected_step = 10;
+						$expected_so   = $expected_step;
+						foreach ( $sample as $row ) :
+							$expected = $expected_so;
+							$actual   = (int) $row->sort_order;
+							$ok       = $actual === $expected || ( $counts['zero'] === $counts['total'] && 0 === $actual );
+							$expected_so += $expected_step;
+							?>
+							<tr>
+								<td><code><?php echo esc_html( (string) $row->id ); ?></code></td>
+								<td><?php echo esc_html( (string) $row->title ); ?></td>
+								<td>
+									<code style="<?php echo $ok ? '' : 'color:#a00;font-weight:bold;'; ?>">
+										<?php echo esc_html( (string) $actual ); ?>
+									</code>
+								</td>
+								<td><code><?php echo esc_html( (string) $expected ); ?></code></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+				<p class="description" style="max-width:920px;">
+					Esperado apos o backfill: id mais recente (primeira linha) recebe <code>sort_order = 10</code>,
+					próximo <code>20</code>, próximo <code>30</code>... passo 10.
+				</p>
+			<?php endif; ?>
+		</div>
+		<?php
 	}
 }

@@ -10,6 +10,19 @@ with this file.
 
 ---
 
+## [0.26.19] - 2026-07-09
+
+### Added
+- Nova pagina de Diagnostico (submenu `ML Gallery Pro > Diagnostico`) com versao, backfill, modo persistido e amostra do `sort_order`.
+- Installer marca `mlgp_force_manual_after_upgrade = 1` em upgrades de qualquer versao < 0.26.19; `Repository::resolve_user_sort_mode` consome a flag no primeiro load do admin e forca `mlgp_gallery_sort_mode = manual` no user_meta.
+
+### Compatibility
+- Mantem todos os fluxos existentes: criacao, edicao, exclusao, capas, importacao, shortcodes e licenca.
+- Preserva slug `ml-gallery-pro`, pasta raiz e arquivo principal.
+- Compatível com atualizacao por cima da v0.26.18 sem perder configuracoes.
+
+---
+
 ## [0.26.18] - 2026-07-09
 
 ### Fixed

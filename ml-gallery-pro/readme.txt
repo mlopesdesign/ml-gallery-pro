@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.26.18
+Stable tag: 0.26.19
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,11 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+
+= 0.26.19 =
+* Adiciona pagina de Diagnostico em `ML Gallery Pro > Diagnostico` mostrando versao, backfill, user_meta persistido e amostra do `sort_order`.
+* Installer marca `mlgp_force_manual_after_upgrade = 1` na subida de qualquer versao < 0.26.19.
+* `Repository::resolve_user_sort_mode` consome essa flag uma vez: grava `mlgp_gallery_sort_mode = manual` no user_meta do admin atual e retorna `manual`, garantindo que `user_meta` antigo (`id_asc`/`updated_at_*`) nao esconda mais os handles de drag.
 
 = 0.26.18 =
 * Correcao da ordem manual: backup do `sort_order` agora roda para qualquer update para 0.26.17+ (a condition anterior cobria apenas < 0.26.16 e perdia sites em 0.26.16).

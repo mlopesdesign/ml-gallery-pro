@@ -100,6 +100,21 @@ final class Repository {
 	 * @return string
 	 */
 	public static function resolve_user_sort_mode( string $meta_key, string $fallback_default ): string {
+		// One-time upgrade nudge: when running on 0.26.19+ for the first time
+		// we force the gallery sort mode back to "manual" once, so old user_meta
+		// values such as "id_asc" no longer mask the drag-and-drop UI. The flag
+		// is consumed by the diagnostics page and auto-cleared afterwards.
+		if ( 'mlgp_gallery_sort_mode' === $meta_key ) {
+			$force_flag = get_option( 'mlgp_force_manual_after_upgrade', '0' );
+
+			if ( '1' === $force_flag ) {
+				update_user_meta( get_current_user_id(), $meta_key, 'manual' );
+				update_option( 'mlgp_force_manual_after_upgrade', '0' );
+
+				return 'manual';
+			}
+		}
+
 		$saved = get_user_meta( get_current_user_id(), $meta_key, true );
 
 		if ( is_string( $saved ) && '' !== $saved && array_key_exists( sanitize_key( $saved ), self::get_sort_modes() ) ) {

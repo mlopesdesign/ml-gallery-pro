@@ -250,6 +250,13 @@ final class Installer {
 				self::backfill_gallery_sort_order();
 			}
 
+			if ( version_compare( $current_version, '0.26.19', '<' ) ) {
+				// Force every admin to land on Manual drag-and-drop after the
+				// jump to 0.26.19, even if their user_meta previously held an
+				// auto sort mode such as id_asc.
+				update_option( 'mlgp_force_manual_after_upgrade', '1', false );
+			}
+
 			self::activate();
 		} finally {
 			delete_transient( $lock_key );
