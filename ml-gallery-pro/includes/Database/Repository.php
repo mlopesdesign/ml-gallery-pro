@@ -15,7 +15,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class Repository {
 
-	public const DEFAULT_SORT_MODE = 'id_desc';
+	public const DEFAULT_SORT_MODE        = 'id_desc';
+	public const DEFAULT_GALLERY_SORT_MODE = 'manual';
+	public const DEFAULT_ALBUM_SORT_MODE   = 'id_desc';
 
 	/**
 	 * Table names.
@@ -85,6 +87,26 @@ final class Repository {
 		$sort_mode = sanitize_key( $sort_mode );
 
 		return array_key_exists( $sort_mode, self::get_sort_modes() ) ? $sort_mode : self::DEFAULT_SORT_MODE;
+	}
+
+	/**
+	 * Reads the persisted sort mode for one collection kind, falling back to a
+	 * caller-provided default when the user has no preference yet. Used for the
+	 * initial render so first-time visitors land on manual drag-and-drop for
+	 * galleries without depending on the global default.
+	 *
+	 * @param string $meta_key            User meta key holding the sort mode.
+	 * @param string $fallback_default    Fallback default when no meta is saved.
+	 * @return string
+	 */
+	public static function resolve_user_sort_mode( string $meta_key, string $fallback_default ): string {
+		$saved = get_user_meta( get_current_user_id(), $meta_key, true );
+
+		if ( is_string( $saved ) && '' !== $saved && array_key_exists( sanitize_key( $saved ), self::get_sort_modes() ) ) {
+			return sanitize_key( $saved );
+		}
+
+		return self::normalize_sort_mode( $fallback_default );
 	}
 
 	/**

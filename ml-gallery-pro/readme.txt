@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.26.16
+Stable tag: 0.26.17
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,11 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+
+= 0.26.17 =
+* Habilita drag-and-drop de galerias por padrao: o modo "Manual (arrastar)" passa a ser o inicial do admin.
+* Adiciona `Repository::DEFAULT_GALLERY_SORT_MODE` = `manual` e helper `resolve_user_sort_mode` para fallback por collection kind.
+* Migra galerias existentes no upgrade para `0.26.16+`: preenche `sort_order` de mais recente para mais antiga, com passo 10, idempotente via option `mlgp_gallery_sort_order_backfilled`.
 
 = 0.26.16 =
 * Adiciona ordenacao manual das galerias na lista do admin: novo modo "Manual (arrastar)" no seletor de ordenacao.

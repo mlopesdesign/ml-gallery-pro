@@ -141,6 +141,67 @@ final class Installer {
 	}
 
 	/**
+	 * Backfills the gallery sort_order column for sites upgrading from a
+	 * version that did not have it. Newest galleries get the lowest
+	 * sort_order so the manual list mirrors the previous id_desc default
+	 * without forcing users to redo all their ordering.
+	 *
+	 * Idempotent — guarded by the {@see 'mlgp_gallery_sort_order_backfilled'}
+	 * option key, so it only runs once per site.
+	 *
+	 * @return void
+	 */
+	public static function backfill_gallery_sort_order(): void {
+		global $wpdb;
+
+		if ( get_option( 'mlgp_gallery_sort_order_backfilled', '0' ) === '1' ) {
+			return;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+		$tables      = self::get_tables();
+		$galleries   = $tables['galleries'];
+		$step        = 10;
+		$batch_size  = 200;
+
+		$has_column = $wpdb->get_var(
+			$wpdb->prepare(
+				"SHOW COLUMNS FROM {$galleries} LIKE %s",
+				'sort_order'
+			)
+		);
+
+		if ( ! $has_column ) {
+			return;
+		}
+
+		// Newest first so the most recent gallery sits at the top of the
+		// manual list. Gaps of `step` allow cheap manual inserts without
+		// renumbering the whole table.
+		$ids = $wpdb->get_col(
+			"SELECT id FROM {$galleries} ORDER BY id DESC"
+		);
+
+		$sort = 0;
+
+		foreach ( array_chunk( $ids, $batch_size ) as $batch ) {
+			foreach ( $batch as $gallery_id ) {
+				$sort += $step;
+				$wpdb->update(
+					$galleries,
+					[ 'sort_order' => $sort ],
+					[ 'id' => (int) $gallery_id ],
+					[ '%d' ],
+					[ '%d' ]
+				);
+			}
+		}
+
+		update_option( 'mlgp_gallery_sort_order_backfilled', '1', false );
+	}
+
+	/**
 	 * Checks whether database/install routines need to run.
 	 *
 	 * @return bool
@@ -183,6 +244,10 @@ final class Installer {
 					$settings['enable_lightbox'] = 1;
 					update_option( 'mlgp_settings', $settings );
 				}
+			}
+
+			if ( version_compare( $current_version, '0.26.16', '<' ) ) {
+				self::backfill_gallery_sort_order();
 			}
 
 			self::activate();

@@ -10,6 +10,20 @@ with this file.
 
 ---
 
+## [0.26.17] - 2026-07-09
+
+### Fixed
+- Drag-and-drop de galerias agora liga por padrão: o modo "Manual (arrastar)" passa a ser o sort inicial do admin (era `id_desc` antes, escondia os handles).
+- Fallback separado por collection: galerias usam `Repository::DEFAULT_GALLERY_SORT_MODE = manual`, álbuns mantêm `id_desc`.
+- Migração retroativa do `sort_order` roda uma vez no upgrade para `0.26.16+` (sites existentes): preenche `sort_order` de mais recente para mais antiga com passo 10, idempotente via option `mlgp_gallery_sort_order_backfilled`.
+
+### Compatibility
+- Mantém todos os fluxos existentes: criação, edição, exclusão, capas, importação, shortcodes e licença.
+- Preserva slug `ml-gallery-pro`, pasta raiz e arquivo principal.
+- Compatível com atualização por cima da v0.26.16 sem perder configurações.
+
+---
+
 ## [0.26.16] - 2026-07-09
 
 ### Added

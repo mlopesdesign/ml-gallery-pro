@@ -210,8 +210,8 @@ final class Admin {
 				'siteUrl'   => home_url(),
 				'version'   => MLGP_VERSION,
 				'sorting'   => [
-					'galleries' => Repository::normalize_sort_mode( (string) get_user_meta( get_current_user_id(), 'mlgp_gallery_sort_mode', true ) ),
-					'albums'    => Repository::normalize_sort_mode( (string) get_user_meta( get_current_user_id(), 'mlgp_album_sort_mode', true ) ),
+					'galleries' => Repository::resolve_user_sort_mode( 'mlgp_gallery_sort_mode', Repository::DEFAULT_GALLERY_SORT_MODE ),
+					'albums'    => Repository::resolve_user_sort_mode( 'mlgp_album_sort_mode', Repository::DEFAULT_ALBUM_SORT_MODE ),
 				],
 				'pageUrls'  => [
 					'dashboard' => $this->get_admin_page_url( 'mlgp-dashboard' ),
