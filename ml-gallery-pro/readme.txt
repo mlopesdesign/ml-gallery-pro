@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.26.19
+Stable tag: 0.26.20
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,13 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+
+= 0.26.20 =
+* Corrige a acumulacao combinatoria de parametros publicos `mlgp_album_view_*` e `mlgp_page_*` nas URLs geradas pelo frontend.
+* Navegacao de albuns passa a remover estados MLGP anteriores antes de adicionar o estado atual, evitando milhares de combinacoes equivalentes para crawlers.
+* Paginacao remove estados de paginacao MLGP concorrentes antes de gerar novos links, preservando o contexto de album quando necessario.
+* URLs legadas com multiplos estados MLGP sao normalizadas por redirecionamento 301 para no maximo um estado de album e um de pagina, preservando parametros nao relacionados.
+* Mantem compatibilidade com ML Carousel Gallery Pro v1.10.13 e com os shortcodes, capas, ordem manual, licenca, updater e estrutura de dados existentes.
 
 = 0.26.19 =
 * Adiciona pagina de Diagnostico em `ML Gallery Pro > Diagnostico` mostrando versao, backfill, user_meta persistido e amostra do `sort_order`.
