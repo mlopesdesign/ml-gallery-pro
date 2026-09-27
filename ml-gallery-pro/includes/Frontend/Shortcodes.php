@@ -178,6 +178,30 @@ final class Shortcodes {
 		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( (string) $_SERVER['REQUEST_URI'] ) : '/'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$current_url = home_url( $request_uri );
 		$target_url  = remove_query_arg( $public_keys, $current_url );
+		$keep        = [];
+
+		// Keep only the most recently appended valid state of each type.
+		// add_query_arg() appends the newly selected MLGP state to the URL,
+		// so the last valid key is the user's latest navigation action.
+		foreach ( $public_keys as $key ) {
+			$value = $_GET[ $key ] ?? ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+			if ( ! is_scalar( $value ) ) {
+				continue;
+			}
+
+			$value = (string) wp_unslash( $value );
+
+			if ( 0 === strpos( $key, 'mlgp_album_view_' ) && preg_match( '/^(?:album|gallery)-\d{1,10}$/', $value ) ) {
+				$keep['album'] = [ $key, $value ];
+			} elseif ( 0 === strpos( $key, 'mlgp_page_' ) && preg_match( '/^\d{1,4}$/', $value ) ) {
+				$keep['page'] = [ $key, $value ];
+			}
+		}
+
+		foreach ( $keep as $state ) {
+			$target_url = add_query_arg( $state[0], $state[1], $target_url );
+		}
 
 		if ( $target_url === $current_url ) {
 			return;
