@@ -58,6 +58,7 @@ final class Shortcodes {
 		add_filter( 'query_vars', [ $this, 'register_gallery_query_var' ] );
 		add_filter( 'redirect_canonical', [ $this, 'disable_gallery_route_canonical_redirect' ], 10, 2 );
 		add_filter( 'template_include', [ $this, 'template_include' ], 20 );
+		add_action( 'template_redirect', [ $this, 'redirect_combinatorial_public_query_state' ], 1 );
 		add_action( 'wp_enqueue_scripts', [ $this, 'register_assets' ] );
 		add_shortcode( 'ml_gallery_pro', [ $this, 'render' ] );
 		add_shortcode( 'mlgp_gallery', [ $this, 'render' ] );
@@ -140,6 +141,69 @@ final class Shortcodes {
 		nocache_headers();
 
 		return MLGP_DIR . 'includes/Frontend/templates/single-gallery.php';
+	}
+
+	/**
+	 * Redirects legacy combinatorial MLGP navigation URLs before template rendering.
+	 *
+	 * A valid public navigation state may contain at most one album-view key and
+	 * one pagination key. Older links could accumulate several independent MLGP
+	 * states in the same URL, creating a combinatorial crawl space and forcing
+	 * repeated full-page PHP renders. Unrelated query args are preserved.
+	 *
+	 * @return void
+	 */
+	public function redirect_combinatorial_public_query_state(): void {
+		if ( is_admin() || wp_doing_ajax() ) {
+			return;
+		}
+
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET';
+
+		if ( ! in_array( $method, [ 'GET', 'HEAD' ], true ) ) {
+			return;
+		}
+
+		$public_keys = $this->get_mlgp_public_query_keys();
+
+		if ( empty( $public_keys ) || ! $this->has_combinatorial_public_query_state( $public_keys ) ) {
+			return;
+		}
+
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( (string) $_SERVER['REQUEST_URI'] ) : '/'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$current_url = home_url( $request_uri );
+		$target_url  = remove_query_arg( $public_keys, $current_url );
+		$keep        = [];
+
+		// Keep only the most recently appended valid state of each type.
+		// add_query_arg() appends the newly selected MLGP state to the URL,
+		// so the last valid key is the user's latest navigation action.
+		foreach ( $public_keys as $key ) {
+			$value = $_GET[ $key ] ?? ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+			if ( ! is_scalar( $value ) ) {
+				continue;
+			}
+
+			$value = (string) wp_unslash( $value );
+
+			if ( 0 === strpos( $key, 'mlgp_album_view_' ) && preg_match( '/^(?:album|gallery)-\d{1,10}$/', $value ) ) {
+				$keep['album'] = [ $key, $value ];
+			} elseif ( 0 === strpos( $key, 'mlgp_page_' ) && preg_match( '/^\d{1,4}$/', $value ) ) {
+				$keep['page'] = [ $key, $value ];
+			}
+		}
+
+		foreach ( $keep as $state ) {
+			$target_url = add_query_arg( $state[0], $state[1], $target_url );
+		}
+
+		if ( $target_url === $current_url ) {
+			return;
+		}
+
+		wp_safe_redirect( $target_url, 301, 'ML Gallery Pro' );
+		exit;
 	}
 
 	/**
@@ -987,6 +1051,43 @@ final class Shortcodes {
 	}
 
 	/**
+	 * Checks whether a public request carries more than one independent MLGP state.
+	 *
+	 * @param array<int, string> $keys MLGP public query keys.
+	 * @return bool
+	 */
+	private function has_combinatorial_public_query_state( array $keys ): bool {
+		$album_view_count = 0;
+		$page_count       = 0;
+
+		foreach ( $keys as $key ) {
+			if ( 0 === strpos( $key, 'mlgp_album_view_' ) ) {
+				$album_view_count++;
+			} elseif ( 0 === strpos( $key, 'mlgp_page_' ) ) {
+				$page_count++;
+			}
+		}
+
+		return $album_view_count > 1 || $page_count > 1 || count( $keys ) > 2;
+	}
+
+	/**
+	 * Returns pagination-state keys present in the current request.
+	 *
+	 * @return array<int, string>
+	 */
+	private function get_mlgp_page_query_keys(): array {
+		return array_values(
+			array_filter(
+				$this->get_mlgp_public_query_keys(),
+				static function ( string $key ): bool {
+					return 0 === strpos( $key, 'mlgp_page_' );
+				}
+			)
+		);
+	}
+
+	/**
 	 * Returns invalid or excess MLGP public query keys to strip from generated URLs.
 	 *
 	 * @return array<int, string>
@@ -1074,8 +1175,9 @@ final class Shortcodes {
 			return '';
 		}
 
-		$base_url = remove_query_arg( $query_key, $this->current_request_url() );
-		$tokens   = $this->get_pagination_tokens( $current_page, $total_pages );
+		$page_keys = array_values( array_unique( array_merge( [ $query_key ], $this->get_mlgp_page_query_keys() ) ) );
+		$base_url  = remove_query_arg( $page_keys, $this->current_request_url() );
+		$tokens    = $this->get_pagination_tokens( $current_page, $total_pages );
 
 		ob_start();
 		?>
@@ -2056,8 +2158,11 @@ final class Shortcodes {
 	 * @return string
 	 */
 	private function build_album_item_url( int $root_album_id, string $type, int $item_id ): string {
-		$query_key = $this->build_album_view_key( $root_album_id );
-		$base_url  = remove_query_arg( $query_key, $this->current_request_url() );
+		$query_key   = $this->build_album_view_key( $root_album_id );
+		$public_keys = $this->get_mlgp_public_query_keys();
+		$base_url    = empty( $public_keys )
+			? $this->current_request_url()
+			: remove_query_arg( $public_keys, $this->current_request_url() );
 
 		if ( 'album' === $type && $item_id === $root_album_id ) {
 			return $base_url;

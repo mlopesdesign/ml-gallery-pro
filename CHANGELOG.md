@@ -10,6 +10,21 @@ with this file.
 
 ---
 
+## [0.26.20] - 2026-09-27
+
+### Fixed
+- Corrige a acumulacao combinatoria de parametros publicos `mlgp_album_view_*` e `mlgp_page_*` nas URLs geradas pelo frontend.
+- Navegacao de albuns agora remove estados MLGP anteriores antes de adicionar o estado atual, impedindo a proliferacao de URLs equivalentes em paginas com muitos albuns.
+- Paginacao remove estados de pagina MLGP concorrentes antes de gerar novos links, preservando o contexto ativo de album quando necessario.
+- URLs legadas que ja contenham multiplos estados MLGP sao normalizadas com redirecionamento 301 para no maximo um estado de album e um de pagina, preservando parametros nao relacionados.
+
+### Compatibility
+- Preserva shortcodes, galerias, albuns, capas, ordenacao manual, licenca, updater e estrutura de banco existentes.
+- Mantem o formato nativo de link consumido pelo ML Carousel Gallery Pro v1.10.13: `?mlgp_album_view_{album_id}=gallery-{gallery_id}`.
+- Nenhuma alteracao necessaria no ML Carousel Gallery Pro.
+
+---
+
 ## [0.26.19] - 2026-07-09
 
 ### Added
