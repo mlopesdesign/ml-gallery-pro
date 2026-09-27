@@ -144,11 +144,6 @@ final class Shortcodes {
 	}
 
 	/**
-	 * Returns the currently routed gallery.
-	 *
-	 * @return array<string, mixed>|null
-	 */
-	/**
 	 * Redirects legacy combinatorial MLGP navigation URLs before template rendering.
 	 *
 	 * A valid public navigation state may contain at most one album-view key and
@@ -211,6 +206,11 @@ final class Shortcodes {
 		exit;
 	}
 
+	/**
+	 * Returns the currently routed gallery.
+	 *
+	 * @return array<string, mixed>|null
+	 */
 	public function get_routed_gallery(): ?array {
 		return is_array( $this->routed_gallery ) ? $this->routed_gallery : null;
 	}
