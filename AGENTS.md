@@ -125,7 +125,8 @@ If the CI build fails, **fix the cause** before re-pushing the tag. Don't `git t
 ### Auto-update on customer sites
 
 `includes/Core/Updater.php` (do not touch without explicit request) calls
-`https://api.github.com/repos/mlopesdesign/ml-gallery-pro/releases/latest`
+`https://api.github.com/repos/mlopesdesign/ml-gallery-pro-releases/releases/latest`
+(public releases-only repo since 0.26.21; this source repo becomes private)
 and exposes the asset as a native WordPress update. The asset name is matched
 in this order:
 
@@ -133,7 +134,10 @@ in this order:
 2. `ml-gallery-pro-vX.Y.Z.zip` (lowercase, dots)
 3. `ml-gallery-pro-X.Y.Z.zip` (no `v`)
 
-Always ship the first one. The others are fallbacks for legacy zips.
+Always ship the first one. Only these exact names are accepted: there is no
+fallback to any other ZIP or to the tag source archive (zipball). Every release
+must be published in `ml-gallery-pro-releases` (CI does it when the
+`GH_RELEASE_TOKEN` secret exists).
 
 ---
 

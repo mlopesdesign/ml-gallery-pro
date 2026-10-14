@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.26.20
+Stable tag: 0.26.21
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,10 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+
+= 0.26.21 =
+* Atualizações automáticas passam a vir do repositório público de releases (ml-gallery-pro-releases); o código-fonte passa a ser privado.
+* Motor de atualização aceita somente o ZIP oficial da versão: removidos o fallback para "qualquer ZIP" e para o zipball da tag. Ícones na tela de atualizações.
 
 = 0.26.20 =
 * Corrige a acumulacao combinatoria de parametros publicos `mlgp_album_view_*` e `mlgp_page_*` nas URLs geradas pelo frontend.

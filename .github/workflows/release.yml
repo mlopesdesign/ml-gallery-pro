@@ -89,6 +89,7 @@ jobs:
       - name: Criar GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.target }}
           name: ML Gallery Pro ${{ steps.version.outputs.target }}
           body: |
             ## ML Gallery Pro ${{ steps.version.outputs.target }}
@@ -113,3 +114,29 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # O updater (0.26.21+) consulta SOMENTE o repositorio publico de releases.
+      # Requer o secret GH_RELEASE_TOKEN (PAT com contents:write em ml-gallery-pro-releases).
+      - name: Verificar token do repositorio de releases
+        id: reltoken
+        env:
+          T: ${{ secrets.GH_RELEASE_TOKEN }}
+        run: if [ -n "$T" ]; then echo "ok=true" >> $GITHUB_OUTPUT; else echo "ok=false" >> $GITHUB_OUTPUT; echo "::warning::GH_RELEASE_TOKEN ausente - publique o ZIP manualmente em ml-gallery-pro-releases"; fi
+
+      - name: Publicar no repositorio publico de releases
+        if: steps.reltoken.outputs.ok == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: mlopesdesign/ml-gallery-pro-releases
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
+          tag_name: ${{ steps.version.outputs.target }}
+          name: ML Gallery Pro ${{ steps.version.outputs.target }}
+          body: |
+            ## ML Gallery Pro ${{ steps.version.outputs.target }}
+
+            ZIP: `${{ steps.hash.outputs.name }}`
+            SHA-256: `${{ steps.hash.outputs.sha256 }}`
+          files: dist/*.zip
+          draft: false
+          prerelease: false
+          make_latest: true

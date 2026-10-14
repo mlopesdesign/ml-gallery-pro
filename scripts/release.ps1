@@ -103,4 +103,5 @@ Write-Host ""
 Write-Host "Depois (com gh autenticado):"
 Write-Host ""
 Write-Host "  gh release create $tag `"$distZip`" --title `"$Title`" --notes @`"$changesReadme`""
+Write-Host "  gh release create $tag `"$distZip`" --repo mlopesdesign/ml-gallery-pro-releases --title `"$Title`" --notes @`"$changesReadme`""   # obrigatorio: o updater le este repo
 Write-Host ""
