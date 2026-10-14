@@ -93,7 +93,8 @@ final class Plugin {
 		$updater = new Updater(
 			MLGP_BASENAME,
 			'ml-gallery-pro',
-			'mlopesdesign/ml-gallery-pro',
+			// Repositorio PUBLICO so com os ZIPs; o codigo-fonte sera privado.
+			'mlopesdesign/ml-gallery-pro-releases',
 			MLGP_VERSION
 		);
 		$updater->hooks();

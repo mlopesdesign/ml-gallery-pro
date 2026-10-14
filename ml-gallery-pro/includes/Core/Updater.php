@@ -105,7 +105,8 @@ class Updater {
 			$transient->no_update = [];
 		}
 
-		if ( version_compare( $this->current_version, $remote_version, '<' ) ) {
+		// Sem o ZIP oficial da versao na release, nao oferece atualizacao (registra no_update).
+		if ( version_compare( $this->current_version, $remote_version, '<' ) && '' !== $this->find_zip_url( $release, $remote_version ) ) {
 			$transient->response[ $this->plugin_file ] = (object) $this->build_update_payload( $release, $remote_version );
 			unset( $transient->no_update[ $this->plugin_file ] );
 		} else {
@@ -118,7 +119,7 @@ class Updater {
 				'new_version'   => $this->current_version,
 				'url'           => 'https://github.com/' . $this->github_repo,
 				'package'       => '',
-				'icons'         => [],
+				'icons'         => $this->icons(),
 				'banners'       => [],
 				'banners_rtl'   => [],
 				'tested'        => '6.8',
@@ -180,7 +181,7 @@ class Updater {
 				'changelog'   => '<pre>' . esc_html( (string) ( $release['body'] ?? '' ) ) . '</pre>',
 			],
 			'banners'        => [],
-			'icons'          => [],
+			'icons'          => $this->icons(),
 		];
 	}
 
@@ -346,27 +347,23 @@ class Updater {
 			}
 		}
 
-		$version_tokens = [ strtolower( $remote_version ), strtolower( $version_underscored ) ];
+		// Sem fallback: "qualquer ZIP" ou o zipball da tag (codigo-fonte) podiam instalar o arquivo errado.
+		return '';
+	}
 
-		foreach ( $assets as $asset ) {
-			if ( false === strpos( $asset['name_lower'], $this->plugin_slug ) ) {
-				continue;
-			}
+	/**
+	 * Icons shown on the WordPress updates screen.
+	 *
+	 * @return array<string,string>
+	 */
+	private function icons(): array {
+		$base = plugin_dir_url( WP_PLUGIN_DIR . '/' . $this->plugin_file ) . 'assets/images/';
 
-			foreach ( $version_tokens as $version_token ) {
-				if ( false !== strpos( $asset['name_lower'], $version_token ) ) {
-					return $asset['url'];
-				}
-			}
-		}
-
-		if ( ! empty( $assets ) ) {
-			return $assets[0]['url'];
-		}
-
-		$tag_name = rawurlencode( (string) ( $release['tag_name'] ?? ( 'v' . $remote_version ) ) );
-
-		return 'https://github.com/' . $this->github_repo . '/archive/refs/tags/' . $tag_name . '.zip';
+		return [
+			'1x'      => $base . 'menu-icon-128.png',
+			'2x'      => $base . 'menu-icon-256.png',
+			'default' => $base . 'menu-icon-256.png',
+		];
 	}
 
 	/**
@@ -384,7 +381,7 @@ class Updater {
 			'new_version'   => $remote_version,
 			'url'           => 'https://github.com/' . $this->github_repo,
 			'package'       => $this->find_zip_url( $release, $remote_version ),
-			'icons'         => [],
+			'icons'         => $this->icons(),
 			'banners'       => [],
 			'banners_rtl'   => [],
 			'tested'        => '6.8',

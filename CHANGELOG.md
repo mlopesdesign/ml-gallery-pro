@@ -10,6 +10,13 @@ with this file.
 
 ---
 
+## [0.26.21] - 2026-10-14
+
+### Changed
+- Updater consulta `ml-gallery-pro-releases` (público, só ZIPs); `Update URI` atualizado. Código-fonte será privado.
+- `find_zip_url` aceita somente o asset oficial da versão; sem fallback para qualquer ZIP nem zipball da tag. Sem asset, não há oferta.
+- Ícones no transient e no `plugins_api`.
+
 ## [0.26.20] - 2026-09-27
 
 ### Fixed
