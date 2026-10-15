@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.26.21
+Stable tag: 0.27.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,14 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+
+= 0.27.0 =
+* Licença passa a ser emitida e conferida pelo site tools.mlopesdesign.com.br. O servidor antigo (license.mlopesdesign.com.br) deixa de ser usado e será desligado.
+* 1 licença = 1 site. Teste grátis de 30 dias por site (reinstalar não reinicia a contagem).
+* Sem teste ou licença válidos, criar, editar e apagar galerias e álbuns fica travado no painel. As galerias publicadas continuam no ar e nenhum dado é apagado.
+* Aba Licença refeita: ativar chave, começar teste, conferir, liberar este site (para usar a chave em outro) e link para comprar.
+* Corrigido: erro do servidor de licenças aparecia como sucesso no painel; agora a mensagem real é mostrada.
+* A resposta do servidor vem assinada; sem internet o site continua liberado por até 7 dias.
 
 = 0.26.21 =
 * Atualizações automáticas passam a vir do repositório público de releases (ml-gallery-pro-releases); o código-fonte passa a ser privado.

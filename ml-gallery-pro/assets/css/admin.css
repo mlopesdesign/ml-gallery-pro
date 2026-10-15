@@ -3913,3 +3913,62 @@ body.admin-bar .mlgp-notice-stack {
 	background: #dff3e7;
 	color: #116444;
 }
+
+/* 0.27.0 — Licença pelo site tools.mlopesdesign.com.br */
+.mlgp-license-lock {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin: 0 0 18px;
+	padding: 16px 18px;
+	border: 1px solid #f1d9a8;
+	border-left: 6px solid var(--mlgp-warning);
+	border-radius: var(--mlgp-radius);
+	background: #fffaf0;
+	box-shadow: var(--mlgp-shadow-soft);
+}
+
+.mlgp-license-lock__text {
+	display: grid;
+	gap: 4px;
+}
+
+.mlgp-license-lock__text strong {
+	color: var(--mlgp-ink);
+	font-size: 14px;
+}
+
+.mlgp-license-lock__text span {
+	color: var(--mlgp-muted);
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.mlgp-license-lock .mlgp-button {
+	flex: 0 0 auto;
+	text-decoration: none;
+}
+
+.mlgp-license-panel .mlgp-actions a.mlgp-button {
+	text-decoration: none;
+}
+
+.mlgp-license-panel__foot code {
+	padding: 1px 6px;
+	border-radius: 6px;
+	background: var(--mlgp-surface-soft);
+	font-size: 12px;
+}
+
+.mlgp-license-panel__hint a {
+	color: var(--mlgp-brand);
+	font-weight: 600;
+}
+
+@media (max-width: 782px) {
+	.mlgp-license-lock {
+		flex-direction: column;
+		align-items: stretch;
+	}
+}

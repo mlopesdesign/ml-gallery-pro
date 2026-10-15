@@ -47,6 +47,10 @@ final class Ajax {
 	 * @return void
 	 */
 	public function hooks(): void {
+		// 0.27.0: sem teste ou licença válidos, as ações que criam/alteram/apagam ficam
+		// travadas. Roda antes dos handlers (admin_init, prioridade 1). Leitura e licença
+		// continuam liberadas; as galerias publicadas seguem no ar.
+		add_action( 'admin_init', [ $this, 'enforce_license' ], 1 );
 		add_action( 'wp_ajax_mlgp_get_dashboard', [ $this, 'get_dashboard' ] );
 		add_action( 'wp_ajax_mlgp_list_galleries', [ $this, 'list_galleries' ] );
 		add_action( 'wp_ajax_mlgp_reorder_galleries', [ $this, 'reorder_galleries' ] );
@@ -104,7 +108,71 @@ final class Ajax {
 	}
 
 	/**
-	 * Validates a license key via the license manager.
+	 * Ações AJAX que só leem dados ou cuidam da licença: liberadas mesmo sem licença.
+	 *
+	 * @var string[]
+	 */
+	private const UNLOCKED_ACTIONS = [
+		'mlgp_get_dashboard',
+		'mlgp_list_galleries',
+		'mlgp_list_albums',
+		'mlgp_list_tags',
+		'mlgp_get_settings',
+		'mlgp_get_validation_report',
+		'mlgp_validate_license',
+		'mlgp_deactivate_license',
+	];
+
+	/**
+	 * Bloqueia as ações de escrita do plugin quando não há teste nem licença válidos.
+	 *
+	 * @return void
+	 */
+	public function enforce_license(): void {
+		global $pagenow;
+
+		$is_ajax       = wp_doing_ajax();
+		$is_admin_post = 'admin-post.php' === $pagenow; // Formulários de galeria/álbum sem AJAX.
+
+		if ( ( ! $is_ajax && ! $is_admin_post ) || empty( $_REQUEST['action'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return;
+		}
+
+		$action = sanitize_key( wp_unslash( $_REQUEST['action'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
+
+		if ( 0 !== strpos( $action, 'mlgp_' ) || in_array( $action, self::UNLOCKED_ACTIONS, true ) ) {
+			return;
+		}
+
+		if ( ! $this->license_manager->is_locked() ) {
+			return;
+		}
+
+		$message = __( 'Ative a licença do ML Gallery Pro (ou comece o teste grátis) para criar e editar galerias. As galerias publicadas continuam no ar.', 'ml-gallery-pro' );
+
+		if ( ! $is_ajax ) {
+			wp_die(
+				esc_html( $message ),
+				esc_html__( 'Licença necessária', 'ml-gallery-pro' ),
+				[
+					'response'  => 403,
+					'back_link' => true,
+				]
+			);
+		}
+
+		wp_send_json_error(
+			[
+				'message' => $message,
+				'locked'  => true,
+				'license' => $this->license_manager->build_payload(),
+			],
+			403
+		);
+	}
+
+	/**
+	 * Validates a license key via the license manager (sem chave: teste grátis).
 	 *
 	 * @return void
 	 */
@@ -113,11 +181,24 @@ final class Ajax {
 		$this->verify_license_request_nonce();
 
 		$license_key = $this->post( 'license_key' );
-		$state       = $this->license_manager->validate_license( $license_key );
+		$result      = $this->license_manager->validate_license( $license_key );
+
+		// Antes o erro do servidor virava "sucesso" com estado inválido; agora o painel
+		// mostra a mensagem real (chave inválida, teste encerrado, sem conexão...).
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error(
+				[
+					'message' => $result->get_error_message(),
+					'code'    => $result->get_error_code(),
+					'license' => $this->license_manager->build_payload(),
+				],
+				400
+			);
+		}
 
 		wp_send_json_success(
 			[
-				'license' => $state,
+				'license' => $result,
 			]
 		);
 	}
