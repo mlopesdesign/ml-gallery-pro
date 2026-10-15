@@ -146,8 +146,8 @@ final class Admin {
 
 		$this->hook_suffixes[] = add_submenu_page(
 			'mlgp-dashboard',
-			__( 'Licenca', 'ml-gallery-pro' ),
-			__( 'Licenca', 'ml-gallery-pro' ),
+			__( 'Licença', 'ml-gallery-pro' ),
+			__( 'Licença', 'ml-gallery-pro' ),
 			$capability,
 			'mlgp-license',
 			[ $this, 'render_page' ]
@@ -339,18 +339,18 @@ final class Admin {
 					'globalRegenerateRunning' => __( 'Regenerando toda a biblioteca local...', 'ml-gallery-pro' ),
 					'confirmGlobalRegenerate' => __( 'Deseja regenerar todas as previews locais com os perfis e watermark atuais? Essa operacao pode levar alguns minutos.', 'ml-gallery-pro' ),
 					'genericError'         => __( 'Nao foi possivel concluir a operacao.', 'ml-gallery-pro' ),
-					'licenseTitle'         => __( 'Licenca / Serial', 'ml-gallery-pro' ),
+					'licenseTitle'         => __( 'Licença', 'ml-gallery-pro' ),
 					'licensePlan'          => __( 'Plano', 'ml-gallery-pro' ),
 					'licenseStatus'        => __( 'Status', 'ml-gallery-pro' ),
-					'licenseValidate'      => __( 'Validar serial', 'ml-gallery-pro' ),
-					'licenseDeactivate'    => __( 'Remover licenca', 'ml-gallery-pro' ),
-					'licenseSuccess'       => __( 'Licenca atualizada.', 'ml-gallery-pro' ),
-					'licenseStartTrial'    => __( 'Iniciar trial gratis', 'ml-gallery-pro' ),
-					'licenseStartTrialHint'=> __( 'Sem serial informado, o botao inicia o trial desta instalacao.', 'ml-gallery-pro' ),
-					'licenseProcessing'    => __( 'Validando...', 'ml-gallery-pro' ),
-					'licenseRemoving'      => __( 'Removendo...', 'ml-gallery-pro' ),
-					'licenseError'         => __( 'Nao foi possivel validar o serial.', 'ml-gallery-pro' ),
-					'licensePlaceholder'   => __( 'MLG-XXXXX-XXXXX-XXXXX', 'ml-gallery-pro' ),
+					'licenseValidate'      => __( 'Ativar licença', 'ml-gallery-pro' ),
+					'licenseDeactivate'    => __( 'Liberar este site', 'ml-gallery-pro' ),
+					'licenseSuccess'       => __( 'Licença atualizada.', 'ml-gallery-pro' ),
+					'licenseStartTrial'    => __( 'Começar teste grátis de 30 dias', 'ml-gallery-pro' ),
+					'licenseStartTrialHint'=> __( 'O teste grátis libera tudo por 30 dias neste site.', 'ml-gallery-pro' ),
+					'licenseProcessing'    => __( 'Conferindo...', 'ml-gallery-pro' ),
+					'licenseRemoving'      => __( 'Liberando...', 'ml-gallery-pro' ),
+					'licenseError'         => __( 'Não foi possível ativar a licença.', 'ml-gallery-pro' ),
+					'licensePlaceholder'   => __( 'ML-XXXXX-XXXXX-XXXXX-XXXXX', 'ml-gallery-pro' ),
 					'bulkDeleteSelectedGalleries' => __( 'Excluir galerias selecionadas', 'ml-gallery-pro' ),
 					'deleteAllGalleriesAction' => __( 'Excluir todas as galerias', 'ml-gallery-pro' ),
 					'deleteAllImagesAction' => __( 'Excluir todas as imagens', 'ml-gallery-pro' ),
@@ -704,8 +704,8 @@ final class Admin {
 			],
 			'mlgp-license' => [
 				'page'        => 'license',
-				'title'       => __( 'Licenca', 'ml-gallery-pro' ),
-				'description' => __( 'Gerencie o serial, o trial e o estado da licenca desta instalacao sem alterar o motor de validacao.', 'ml-gallery-pro' ),
+				'title'       => __( 'Licença', 'ml-gallery-pro' ),
+				'description' => __( 'Ative a sua licença, comece o teste grátis de 30 dias ou libere este site para usar a chave em outro.', 'ml-gallery-pro' ),
 			],
 		];
 
@@ -745,7 +745,7 @@ final class Admin {
 				'page'  => 'mlgp-settings',
 			],
 			[
-				'label' => __( 'Licenca', 'ml-gallery-pro' ),
+				'label' => __( 'Licença', 'ml-gallery-pro' ),
 				'page'  => 'mlgp-license',
 			],
 		];

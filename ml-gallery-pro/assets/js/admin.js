@@ -2332,37 +2332,91 @@ if (root || config.isPostEditor) {
 	}
 
 	function renderLicensePanel(license) {
+		// 0.27.0: licença emitida pelo site tools.mlopesdesign.com.br (1 site por licença,
+		// teste grátis de 30 dias). Sem teste/licença, o painel trava; o site continua no ar.
 		const payload = license && typeof license === "object" ? license : {};
-		const stateLabel = payload.state_label || payload.plan || (payload.is_full_active ? "Full" : "Free");
-		const plan = payload.plan || stateLabel;
-		const message = payload.message || (payload.is_full_active ? "Licenca Full ativa." : "Versao Free ativa.");
-		const placeholder = config.strings.licensePlaceholder || "MLG-XXXXX-XXXXX-XXXXX";
-		const isFree = String(stateLabel || "").toLowerCase() === "free";
-		const isTrial = String(stateLabel || "").toLowerCase() === "trial";
-		const primaryLabel = !String(payload.license_key || "").trim() && isFree
-			? (config.strings.licenseStartTrial || "Iniciar trial gratis")
-			: (config.strings.licenseValidate || "Validar serial");
+		const active = !!payload.is_full_active;
+		const isTrial = active && payload.mode === "trial";
+		const hasKey = String(payload.license_key || "").trim() !== "";
+		const stateLabel = payload.state_label || (active ? "Ativa" : "Sem licença");
+		const message = payload.message || "";
+		const placeholder = config.strings.licensePlaceholder || "ML-XXXXX-XXXXX-XXXXX-XXXXX";
+		const details = [];
+
+		if (payload.plan) {
+			details.push(`<span><strong>Plano:</strong> ${escapeHtml(payload.plan)}</span>`);
+		}
+		if (active) {
+			details.push(`<span><strong>${isTrial ? "Teste até" : "Validade"}:</strong> ${escapeHtml(payload.expires_label || "Sem vencimento")}</span>`);
+		}
+		if (hasKey) {
+			details.push(`<span><strong>Chave:</strong> <code>${escapeHtml(payload.license_key)}</code></span>`);
+		}
+		details.push(`<span><strong>Uso:</strong> 1 site por licença</span>`);
+
+		const keyForm = `
+			<div class="mlgp-license-panel__input">
+				<input type="text" data-mlgp-license-input placeholder="${escapeHtml(placeholder)}" value="" autocomplete="off" spellcheck="false">
+			</div>
+			<p class="mlgp-license-panel__hint">${escapeHtml(isTrial ? "Já comprou? Cole a chave para trocar o teste pela licença." : "Cole a chave que você recebeu por e-mail após a compra.")}</p>
+		`;
+
+		let actions = "";
+		if (!active || isTrial) {
+			actions += `<button type="button" class="mlgp-button mlgp-button--accent" data-mlgp-validate-license>${escapeHtml(config.strings.licenseValidate || "Ativar licença")}</button>`;
+		}
+		if (!active && payload.can_start_trial) {
+			actions += `<button type="button" class="mlgp-button mlgp-button--ghost" data-mlgp-start-trial>${escapeHtml(config.strings.licenseStartTrial || "Começar teste grátis de 30 dias")}</button>`;
+		}
+		if (active && !isTrial) {
+			actions += `<button type="button" class="mlgp-button mlgp-button--ghost" data-mlgp-check-license>Conferir agora</button>`;
+			actions += `<button type="button" class="mlgp-button mlgp-button--ghost" data-mlgp-deactivate-license>${escapeHtml(config.strings.licenseDeactivate || "Liberar este site")}</button>`;
+		}
+		if (!active || isTrial) {
+			actions += `<a class="mlgp-button mlgp-button--ghost" href="${escapeHtml(payload.buy_url || "https://tools.mlopesdesign.com.br/produtos/")}" target="_blank" rel="noopener">Comprar licença</a>`;
+		}
 
 		return `
-			<div class="mlgp-license-panel">
+			<div class="mlgp-license-panel${active ? "" : " is-locked"}">
 				<div class="mlgp-license-panel__header">
-					<strong>${escapeHtml(config.strings.licenseTitle || "Licenca / Serial")}</strong>
+					<strong>${escapeHtml(config.strings.licenseTitle || "Licença")}</strong>
 					<span class="mlgp-pill mlgp-pill--license-${escapeHtml(String(payload.state_tone || "free"))}">${escapeHtml(stateLabel)}</span>
 				</div>
-				<p class="mlgp-license-panel__status">${escapeHtml(message)}</p>
-				<div class="mlgp-license-panel__input">
-					<input type="text" data-mlgp-license-input placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(payload.license_key || "")}">
-				</div>
-				<p class="mlgp-license-panel__hint">${escapeHtml(!String(payload.license_key || "").trim() && isFree ? (config.strings.licenseStartTrialHint || "Sem serial informado, o botao inicia o trial da instalacao.") : (isTrial ? "Trial ativo. Informe um serial para promover a instalacao para Full." : "Informe o serial para validar ou remova a licenca local."))}</p>
-				<div class="mlgp-actions">
-					<button type="button" class="mlgp-button mlgp-button--accent" data-mlgp-validate-license>${escapeHtml(primaryLabel)}</button>
-					<button type="button" class="mlgp-button mlgp-button--ghost" data-mlgp-deactivate-license>${escapeHtml(config.strings.licenseDeactivate || "Remover licenca")}</button>
-				</div>
-				<div class="mlgp-license-panel__foot">
-					<span><strong>Estado:</strong> ${escapeHtml(stateLabel)}</span>
-					<span><strong>Plano:</strong> ${escapeHtml(plan)}</span>
-				</div>
+				${message ? `<p class="mlgp-license-panel__status">${escapeHtml(message)}</p>` : ""}
+				${(!active || isTrial) ? keyForm : ""}
+				<div class="mlgp-actions">${actions}</div>
+				<div class="mlgp-license-panel__foot">${details.join("")}</div>
+				${active && !isTrial ? `<p class="mlgp-license-panel__hint">Vai trocar de site? Use "Liberar este site" aqui e ative a mesma chave no site novo. Suas licenças ficam em <a href="${escapeHtml(payload.account_url || "https://tools.mlopesdesign.com.br/minha-conta/")}" target="_blank" rel="noopener">Minha conta</a>.</p>` : ""}
 			</div>
+		`;
+	}
+
+	function syncLicenseLock() {
+		// Faixa fixa acima do painel: aparece em todas as telas quando o plugin está travado.
+		if (!root || config.isPostEditor || !root.parentNode) {
+			return;
+		}
+		const license = state.license || {};
+		let banner = document.getElementById("mlgp-license-lock");
+		if (!license.locked || state.page === "license") {
+			if (banner) {
+				banner.remove();
+			}
+			return;
+		}
+		if (!banner) {
+			banner = document.createElement("div");
+			banner.id = "mlgp-license-lock";
+			banner.className = "mlgp-license-lock";
+			root.parentNode.insertBefore(banner, root);
+		}
+		const url = (config.pageUrls && config.pageUrls.license) || "";
+		banner.innerHTML = `
+			<div class="mlgp-license-lock__text">
+				<strong>${escapeHtml(license.can_start_trial ? "Comece o teste grátis de 30 dias" : "Licença necessária")}</strong>
+				<span>${escapeHtml(license.message || "Ative a licença para criar e editar galerias. As galerias publicadas continuam no ar.")}</span>
+			</div>
+			<a class="mlgp-button mlgp-button--accent" href="${escapeHtml(url)}">${escapeHtml(license.can_start_trial ? "Começar teste" : "Ativar licença")}</a>
 		`;
 	}
 
@@ -2420,7 +2474,7 @@ if (root || config.isPostEditor) {
 				<div class="mlgp-panel-header-inline">
 					<div>
 						<h2>${escapeHtml(config.strings.licenseTitle || "Licenca / Serial")}</h2>
-						<p class="mlgp-panel__intro">Acesso direto ao estado da licenca, validacao de serial e remocao local sem alterar o motor de licenciamento.</p>
+						<p class="mlgp-panel__intro">A licença do ML Gallery Pro vale para 1 site. Sem licença, as galerias publicadas continuam no ar; só a criação e a edição ficam travadas.</p>
 					</div>
 				</div>
 				${renderLicensePanel(state.license)}
@@ -2460,7 +2514,7 @@ if (root || config.isPostEditor) {
 			tools: () => renderSettingsToolsTab(settings, isRegenerating, storageLabel),
 			license: () => renderSettingsSection(
 				config.strings.licenseTitle || "Licenca / Serial",
-				"Gerencie o serial e o estado da licenca sem alterar o motor de validacao.",
+				"A licença vale para 1 site. Teste grátis de 30 dias.",
 				renderLicensePanel(state.license)
 			),
 			validation: () => renderSettingsValidationTab(state.validation),
@@ -3147,6 +3201,7 @@ if (root || config.isPostEditor) {
 	}
 
 	async function boot() {
+		syncLicenseLock();
 		try {
 			if (config.isPostEditor) {
 				// We don't load everything immediately to avoid overhead on every post load.
@@ -3462,7 +3517,7 @@ if (root || config.isPostEditor) {
 			return;
 		}
 
-		const target = event.target.closest("[data-mlgp-trigger-picker],[data-edit-gallery],[data-delete-gallery],[data-reset-gallery],[data-manage-album],[data-delete-album],[data-reset-album],[data-mlgp-open-album-picker],[data-mlgp-close-album-picker],[data-mlgp-add-item-flow],[data-mlgp-batch-add-picker],[data-mlgp-move-album-item],[data-mlgp-remove-album-item],[data-mlgp-save-album-all],[data-mlgp-copy-shortcode],[data-mlgp-regenerate-all],[data-mlgp-media-pick],[data-mlgp-media-clear],[data-mlgp-settings-tab],[data-mlgp-refresh-validation],[data-mlgp-validate-license],[data-mlgp-deactivate-license],[data-mlgp-delete-selected-galleries],[data-mlgp-delete-all-galleries],[data-mlgp-delete-all-images],[data-mlgp-delete-selected-albums],[data-mlgp-factory-reset],[data-mlgp-apply-galleries-all],[data-mlgp-apply-albums-all]");
+		const target = event.target.closest("[data-mlgp-trigger-picker],[data-edit-gallery],[data-delete-gallery],[data-reset-gallery],[data-manage-album],[data-delete-album],[data-reset-album],[data-mlgp-open-album-picker],[data-mlgp-close-album-picker],[data-mlgp-add-item-flow],[data-mlgp-batch-add-picker],[data-mlgp-move-album-item],[data-mlgp-remove-album-item],[data-mlgp-save-album-all],[data-mlgp-copy-shortcode],[data-mlgp-regenerate-all],[data-mlgp-media-pick],[data-mlgp-media-clear],[data-mlgp-settings-tab],[data-mlgp-refresh-validation],[data-mlgp-validate-license],[data-mlgp-deactivate-license],[data-mlgp-start-trial],[data-mlgp-check-license],[data-mlgp-delete-selected-galleries],[data-mlgp-delete-all-galleries],[data-mlgp-delete-all-images],[data-mlgp-delete-selected-albums],[data-mlgp-factory-reset],[data-mlgp-apply-galleries-all],[data-mlgp-apply-albums-all]");
 
 		if (!target) {
 			return;
@@ -3543,39 +3598,52 @@ if (root || config.isPostEditor) {
 			return;
 		}
 
-		if (target.hasAttribute("data-mlgp-validate-license") || target.hasAttribute("data-mlgp-deactivate-license")) {
+		if (target.hasAttribute("data-mlgp-validate-license") || target.hasAttribute("data-mlgp-deactivate-license") || target.hasAttribute("data-mlgp-start-trial") || target.hasAttribute("data-mlgp-check-license")) {
 			const licenseInput = root.querySelector("[data-mlgp-license-input]");
-			const licenseKey = licenseInput ? String(licenseInput.value || "").trim() : "";
-			const action = target.hasAttribute("data-mlgp-validate-license") ? "mlgp_validate_license" : "mlgp_deactivate_license";
-			const payload = {
-				license_key: licenseKey,
-				license_nonce: config.licenseNonce || "",
-			};
+			const isDeactivate = target.hasAttribute("data-mlgp-deactivate-license");
+			const isTrialStart = target.hasAttribute("data-mlgp-start-trial");
+			const isCheck = target.hasAttribute("data-mlgp-check-license");
+			let licenseKey = licenseInput ? String(licenseInput.value || "").trim() : "";
+			if (isTrialStart) {
+				licenseKey = "";
+			} else if (isCheck) {
+				licenseKey = String((state.license && state.license.license_key) || "");
+			} else if (!isDeactivate && !licenseKey) {
+				showNotice("Cole a chave da licença no campo.", "error");
+				if (licenseInput) {
+					licenseInput.focus();
+				}
+				return;
+			}
+			if (isDeactivate && !window.confirm("Liberar este site? O ML Gallery Pro fica travado aqui até você ativar uma licença de novo.")) {
+				return;
+			}
+			const originalLabel = target.textContent;
 
 			try {
 				target.disabled = true;
-				target.textContent = target.hasAttribute("data-mlgp-validate-license") ? (config.strings.licenseProcessing || "Validando...") : (config.strings.licenseRemoving || "Removendo...");
-				const response = await request(action, payload);
+				target.textContent = isDeactivate ? (config.strings.licenseRemoving || "Liberando...") : (config.strings.licenseProcessing || "Conferindo...");
+				const response = await request(isDeactivate ? "mlgp_deactivate_license" : "mlgp_validate_license", {
+					license_key: licenseKey,
+					license_nonce: config.licenseNonce || "",
+				});
 				state.license = response.license || state.license;
 				if (state.dashboard && typeof state.dashboard === "object") {
 					state.dashboard.license = state.license;
 				}
-				showNotice((response.license && response.license.message) || config.strings.licenseSuccess || "Licenca atualizada.");
+				showNotice((response.license && response.license.message) || config.strings.licenseSuccess || "Licença atualizada.");
 				if (state.page === "license") {
 					renderLicensePage();
+				} else if (state.page === "dashboard") {
+					renderDashboard();
 				} else {
 					renderSettings();
 				}
-				if (state.page === "dashboard") {
-					renderDashboard();
-				}
+				syncLicenseLock();
 			} catch (error) {
-				showNotice(error.message || config.strings.licenseError || "Nao foi possivel validar o serial.", "error");
-			} finally {
+				showNotice(error.message || config.strings.licenseError || "Não foi possível ativar a licença.", "error");
 				target.disabled = false;
-				target.textContent = target.hasAttribute("data-mlgp-validate-license")
-					? escapeHtml((!String((state.license && state.license.license_key) || "").trim() && String((state.license && (state.license.state_label || state.license.plan)) || "").toLowerCase() === "free") ? (config.strings.licenseStartTrial || "Iniciar trial gratis") : (config.strings.licenseValidate || "Validar serial"))
-					: escapeHtml(config.strings.licenseDeactivate || "Remover licenca");
+				target.textContent = originalLabel;
 			}
 
 			return;

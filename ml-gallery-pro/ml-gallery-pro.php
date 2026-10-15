@@ -4,7 +4,7 @@
  * Plugin URI: https://mlopesdesign.com/
  * Update URI: https://github.com/mlopesdesign/ml-gallery-pro-releases
  * Description: Galerias e álbuns profissionais para WordPress com painel dedicado, AJAX e estrutura escalável.
- * Version: 0.26.21
+ * Version: 0.27.0
  * Author: Mlopesdesign
  * Author URI: https://mlopesdesign.com/
  * Text Domain: ml-gallery-pro
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MLGP_VERSION', '0.26.21' );
+define( 'MLGP_VERSION', '0.27.0' );
 define( 'MLGP_FILE', __FILE__ );
 define( 'MLGP_BASENAME', plugin_basename( __FILE__ ) );
 define( 'MLGP_DIR', plugin_dir_path( __FILE__ ) );
@@ -30,6 +30,7 @@ require_once MLGP_DIR . 'includes/Database/Installer.php';
 require_once MLGP_DIR . 'includes/Database/Repository.php';
 require_once MLGP_DIR . 'includes/Admin/Admin.php';
 require_once MLGP_DIR . 'includes/Admin/Ajax.php';
+require_once MLGP_DIR . 'includes/class-ml-license-client.php';
 require_once MLGP_DIR . 'includes/License/Manager.php';
 require_once MLGP_DIR . 'includes/Frontend/Shortcodes.php';
 require_once MLGP_DIR . 'includes/Blocks/GalleryBlock.php';
@@ -37,6 +38,14 @@ require_once MLGP_DIR . 'includes/Core/Updater.php';
 require_once MLGP_DIR . 'includes/Core/Plugin.php';
 
 register_activation_hook( __FILE__, [ 'MLGP\Database\Installer', 'activate' ] );
+
+// 0.27.0: ao desativar, para a renovação diária da licença (o estado salvo é mantido).
+register_deactivation_hook(
+	__FILE__,
+	static function () {
+		wp_clear_scheduled_hook( 'mllc_ml_gallery_pro_refresh' );
+	}
+);
 
 add_action(
 	'plugins_loaded',

@@ -10,6 +10,17 @@ with this file.
 
 ---
 
+## [0.27.0] - 2026-10-15
+
+### Changed
+- Licenciamento migrado para o site tools.mlopesdesign.com.br (`ML_License_Client_V2`, `includes/class-ml-license-client.php`). O servidor antigo deixa de ser chamado; a option antiga `mlgp_license_state` é preservada.
+- 1 licença = 1 site; teste grátis de 30 dias por site (endpoint `license/trial`).
+- Trava: sem teste/licença válidos, ações AJAX de escrita e os formulários `admin-post` do plugin respondem 403. Leitura, licença e o front-end continuam funcionando.
+- Aba Licença refeita (ativar, teste, conferir, liberar site, comprar) e faixa de aviso em todas as telas quando travado.
+
+### Fixed
+- Erro do servidor de licenças virava resposta de sucesso no AJAX.
+
 ## [0.26.21] - 2026-10-14
 
 ### Changed
