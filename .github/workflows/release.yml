@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  pull_request:
   workflow_dispatch:
     inputs:
       tag:
@@ -47,6 +48,7 @@ jobs:
             target="${GITHUB_REF_NAME}"
           fi
           bare="${target#v}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then bare=$(grep -E '^\s*\*\s*Version:' ml-gallery-pro/ml-gallery-pro.php | head -1 | sed -E 's/.*Version:\s*([0-9.]+).*/\1/'); target="v$bare"; fi
           echo "target=$target" >> $GITHUB_OUTPUT
           echo "bare=$bare" >> $GITHUB_OUTPUT
           echo "Alvo: $target (bare: $bare)"
@@ -86,7 +88,14 @@ jobs:
           echo "size=$(stat -c%s "$f")" >> $GITHUB_OUTPUT
           echo "sha256=$(sha256sum "$f" | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
+      - name: ML Release Gate (plugin sozinho, identidade, atualizacao na mesma pasta)
+        # Trava obrigatoria: se reprovar, nenhum release e criado e nada chega aos clientes.
+        env:
+          GATE_MODE: ${{ github.event_name == 'pull_request' && 'pr' || 'release' }}
+        run: bash .github/gate/gate.sh ml-gallery-pro dist/${{ steps.hash.outputs.name }}
+
       - name: Criar GitHub Release
+        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.target }}
@@ -118,13 +127,14 @@ jobs:
       # O updater (0.26.21+) consulta SOMENTE o repositorio publico de releases.
       # Requer o secret GH_RELEASE_TOKEN (PAT com contents:write em ml-gallery-pro-releases).
       - name: Verificar token do repositorio de releases
+        if: github.event_name != 'pull_request'
         id: reltoken
         env:
           T: ${{ secrets.GH_RELEASE_TOKEN }}
         run: if [ -n "$T" ]; then echo "ok=true" >> $GITHUB_OUTPUT; else echo "ok=false" >> $GITHUB_OUTPUT; echo "::warning::GH_RELEASE_TOKEN ausente - publique o ZIP manualmente em ml-gallery-pro-releases"; fi
 
       - name: Publicar no repositorio publico de releases
-        if: steps.reltoken.outputs.ok == 'true'
+        if: github.event_name != 'pull_request' && steps.reltoken.outputs.ok == 'true'
         uses: softprops/action-gh-release@v2
         with:
           repository: mlopesdesign/ml-gallery-pro-releases
