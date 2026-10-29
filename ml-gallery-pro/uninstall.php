@@ -14,3 +14,6 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 }
 
 wp_clear_scheduled_hook( 'mllc_ml_gallery_pro_refresh' );
+
+// 0.27.1: cache da última release do GitHub (não é dado do cliente).
+delete_option( 'mlgp_updater_last_release' );

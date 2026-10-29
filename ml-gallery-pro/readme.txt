@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.27.0
+Stable tag: 0.27.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,9 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+
+= 0.27.1 =
+* Corrigido (critico): em hospedagem compartilhada a consulta ao GitHub era recusada (limite da API por IP) e o plugin sumia da lista de atualizações do WordPress: sem coluna de atualização automática e sem aviso de versão nova. Agora, se a API recusar, a versão é lida pela página pública da release; se o GitHub não responder, vale a última release conhecida. O plugin fica sempre registrado no WordPress.
 
 = 0.27.0 =
 * Licença passa a ser emitida e conferida pelo site tools.mlopesdesign.com.br. O servidor antigo (license.mlopesdesign.com.br) deixa de ser usado e será desligado.

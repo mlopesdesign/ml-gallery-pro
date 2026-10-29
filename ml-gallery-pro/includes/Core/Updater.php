@@ -5,6 +5,12 @@
  * Detects stable GitHub releases, exposes them to the native WordPress updater
  * and normalizes the extracted package when GitHub's source archive is used.
  *
+ * 0.27.1: hospedagem compartilhada divide o IP com muitos sites e a API do GitHub
+ * (60 consultas/hora sem login) responde 403. Antes, nesse caso o plugin sumia do
+ * transient do WordPress (sem coluna de atualizacao e sem deteccao de versao nova).
+ * Agora: API -> pagina publica da release (github.com, fora do limite da API) ->
+ * ultima release boa guardada; e o plugin sempre fica registrado em no_update.
+ *
  * @package MLGalleryPro
  */
 
@@ -21,6 +27,16 @@ class Updater {
 
 	/** Negative cache lifetime after a failed GitHub request. */
 	private const ERROR_CACHE_TTL = 5 * MINUTE_IN_SECONDS;
+
+	/** Option com a ultima release valida (usada quando o GitHub nao responde). */
+	public const LAST_RELEASE_OPTION = 'mlgp_updater_last_release';
+
+	/** Validade da ultima release guardada quando o GitHub segue fora do ar. */
+	private const LAST_RELEASE_MAX_AGE = 7 * DAY_IN_SECONDS;
+
+	/** Tempo maximo da consulta a API e de cada HEAD na pagina publica (soma baixa: hospedagem com limite de 30 s). */
+	private const API_TIMEOUT  = 8;
+	private const HEAD_TIMEOUT = 5;
 
 	/** Path relative to the plugins directory. */
 	private string $plugin_file;
@@ -85,18 +101,6 @@ class Updater {
 			return $transient;
 		}
 
-		$release = $this->get_latest_release();
-
-		if ( ! $release ) {
-			return $transient;
-		}
-
-		$remote_version = $this->normalize_version( (string) ( $release['tag_name'] ?? '' ) );
-
-		if ( '' === $remote_version ) {
-			return $transient;
-		}
-
 		if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
 			$transient->response = [];
 		}
@@ -105,29 +109,36 @@ class Updater {
 			$transient->no_update = [];
 		}
 
+		$release        = $this->get_latest_release();
+		$remote_version = $release ? $this->normalize_version( (string) ( $release['tag_name'] ?? '' ) ) : '';
+
 		// Sem o ZIP oficial da versao na release, nao oferece atualizacao (registra no_update).
-		if ( version_compare( $this->current_version, $remote_version, '<' ) && '' !== $this->find_zip_url( $release, $remote_version ) ) {
+		if ( '' !== $remote_version && version_compare( $this->current_version, $remote_version, '<' ) && '' !== $this->find_zip_url( $release, $remote_version ) ) {
 			$transient->response[ $this->plugin_file ] = (object) $this->build_update_payload( $release, $remote_version );
 			unset( $transient->no_update[ $this->plugin_file ] );
-		} else {
-			unset( $transient->response[ $this->plugin_file ] );
 
-			$transient->no_update[ $this->plugin_file ] = (object) [
-				'id'            => 'github.com/' . $this->github_repo,
-				'slug'          => $this->plugin_slug,
-				'plugin'        => $this->plugin_file,
-				'new_version'   => $this->current_version,
-				'url'           => 'https://github.com/' . $this->github_repo,
-				'package'       => '',
-				'icons'         => $this->icons(),
-				'banners'       => [],
-				'banners_rtl'   => [],
-				'tested'        => '6.8',
-				'requires'      => '6.0',
-				'requires_php'  => '7.4',
-				'compatibility' => new \stdClass(),
-			];
+			return $transient;
 		}
+
+		// GitHub fora do ar ou sem versao nova: o plugin continua registrado, para o
+		// WordPress mostrar a coluna de atualizacao e voltar a detectar na proxima consulta.
+		unset( $transient->response[ $this->plugin_file ] );
+
+		$transient->no_update[ $this->plugin_file ] = (object) [
+			'id'            => 'github.com/' . $this->github_repo,
+			'slug'          => $this->plugin_slug,
+			'plugin'        => $this->plugin_file,
+			'new_version'   => $this->current_version,
+			'url'           => 'https://github.com/' . $this->github_repo,
+			'package'       => '',
+			'icons'         => $this->icons(),
+			'banners'       => [],
+			'banners_rtl'   => [],
+			'tested'        => '6.8',
+			'requires'      => '6.0',
+			'requires_php'  => '7.4',
+			'compatibility' => new \stdClass(),
+		];
 
 		return $transient;
 	}
@@ -162,6 +173,13 @@ class Updater {
 		}
 
 		$download_url = $this->find_zip_url( $release, $remote_version );
+		$changelog    = (string) ( $release['body'] ?? '' );
+
+		if ( '' === $changelog ) {
+			$changelog_html = '<p><a href="' . esc_url( 'https://github.com/' . $this->github_repo . '/releases' ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Notas das versões no GitHub', 'ml-gallery-pro' ) . '</a></p>';
+		} else {
+			$changelog_html = '<pre>' . esc_html( $changelog ) . '</pre>';
+		}
 
 		return (object) [
 			'name'           => 'ML Gallery Pro',
@@ -178,7 +196,7 @@ class Updater {
 			'last_updated'   => $release['published_at'] ?? '',
 			'sections'       => [
 				'description' => '<p>Professional WordPress gallery plugin by Mlopesdesign.</p>',
-				'changelog'   => '<pre>' . esc_html( (string) ( $release['body'] ?? '' ) ) . '</pre>',
+				'changelog'   => $changelog_html,
 			],
 			'banners'        => [],
 			'icons'          => $this->icons(),
@@ -267,22 +285,60 @@ class Updater {
 	/**
 	 * Retrieves the latest stable GitHub release.
 	 *
+	 * Ordem: cache -> API do GitHub -> pagina publica da release -> ultima release boa.
+	 *
 	 * @return array|null Release data or null on failure.
 	 */
 	private function get_latest_release(): ?array {
 		$cached = get_site_transient( $this->transient_key );
 
-		if ( false !== $cached ) {
-			return ! empty( $cached ) && is_array( $cached ) ? $cached : null;
+		if ( is_array( $cached ) ) {
+			if ( ! empty( $cached ) ) {
+				return $cached;
+			}
+
+			// Falha recente em cache: nao repete a consulta, usa a ultima release boa.
+			return $this->last_good_release();
 		}
 
-		$url = 'https://api.github.com/repos/' . $this->github_repo . '/releases/latest';
+		// Trava antes de consultar: requisicoes simultaneas, ou uma que estoure o tempo de
+		// execucao, nao repetem a cadeia de consultas (sobrescrita abaixo se der certo).
+		set_site_transient( $this->transient_key, [], self::ERROR_CACHE_TTL );
 
+		$data = $this->fetch_release_from_api();
+
+		if ( null === $data ) {
+			$data = $this->fetch_release_from_web();
+		}
+
+		$version = $data ? $this->normalize_version( (string) ( $data['tag_name'] ?? '' ) ) : '';
+
+		// So conta como release boa a que tem o ZIP oficial: release sem asset (ou ainda
+		// subindo) nao apaga a ultima release boa guardada.
+		if ( '' === $version || '' === $this->find_zip_url( $data, $version ) ) {
+			$last = $this->last_good_release();
+			return $last ? $last : ( '' !== $version ? $data : null );
+		}
+
+		$data['mlgp_saved_at'] = time();
+
+		set_site_transient( $this->transient_key, $data, self::CACHE_TTL );
+		update_option( self::LAST_RELEASE_OPTION, $data, false );
+
+		return $data;
+	}
+
+	/**
+	 * Consulta a API do GitHub (traz notas da versao e data).
+	 *
+	 * @return array|null
+	 */
+	private function fetch_release_from_api(): ?array {
 		$response = wp_remote_get(
-			$url,
+			'https://api.github.com/repos/' . $this->github_repo . '/releases/latest',
 			[
-				'timeout'    => 15,
-				'user-agent' => 'ML-Gallery-Pro/' . $this->current_version . '; WordPress/' . get_bloginfo( 'version' ) . '; ' . get_bloginfo( 'url' ),
+				'timeout'    => self::API_TIMEOUT,
+				'user-agent' => $this->user_agent(),
 				'headers'    => [
 					'Accept'               => 'application/vnd.github+json',
 					'X-GitHub-Api-Version' => '2022-11-28',
@@ -290,21 +346,146 @@ class Updater {
 			]
 		);
 
-		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
-			set_site_transient( $this->transient_key, [], self::ERROR_CACHE_TTL );
+		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
 			return null;
 		}
 
 		$data = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		if ( ! is_array( $data ) || '' === $this->normalize_version( (string) ( $data['tag_name'] ?? '' ) ) ) {
-			set_site_transient( $this->transient_key, [], self::ERROR_CACHE_TTL );
 			return null;
 		}
 
-		set_site_transient( $this->transient_key, $data, self::CACHE_TTL );
-
 		return $data;
+	}
+
+	/**
+	 * Le a ultima release pela pagina publica do GitHub (sem o limite da API).
+	 *
+	 * github.com/<repo>/releases/latest redireciona para /releases/tag/<tag>; o asset
+	 * oficial so entra se o link de download dele existir (redirecionamento 302).
+	 *
+	 * @return array|null Mesmo formato da API (tag_name, assets, body, published_at).
+	 */
+	private function fetch_release_from_web(): ?array {
+		$base     = 'https://github.com/' . $this->github_repo . '/releases';
+		$response = wp_remote_head(
+			$base . '/latest',
+			[
+				'timeout'     => self::HEAD_TIMEOUT,
+				'redirection' => 0,
+				'user-agent'  => $this->user_agent(),
+			]
+		);
+
+		if ( is_wp_error( $response ) || ! in_array( (int) wp_remote_retrieve_response_code( $response ), [ 301, 302, 303, 307, 308 ], true ) ) {
+			return null;
+		}
+
+		$location = wp_remote_retrieve_header( $response, 'location' );
+
+		if ( is_array( $location ) ) {
+			$location = end( $location );
+		}
+
+		if ( ! is_string( $location ) ) {
+			$location = '';
+		}
+
+		if ( ! preg_match( '#/releases/tag/([^/?\#]+)/?$#', (string) $location, $match ) ) {
+			return null;
+		}
+
+		$tag     = rawurldecode( $match[1] );
+		$version = $this->normalize_version( $tag );
+
+		if ( '' === $version ) {
+			return null;
+		}
+
+		$assets = [];
+
+		foreach ( $this->expected_asset_names( $version ) as $name ) {
+			$url  = $base . '/download/' . rawurlencode( $tag ) . '/' . rawurlencode( $name );
+			$head = wp_remote_head(
+				$url,
+				[
+					'timeout'     => self::HEAD_TIMEOUT,
+					'redirection' => 0,
+					'user-agent'  => $this->user_agent(),
+				]
+			);
+
+			// Erro de rede, 5xx ou 429 nao prova que o asset falta: aborta (vale a ultima release boa).
+			if ( is_wp_error( $head ) ) {
+				return null;
+			}
+
+			$code = (int) wp_remote_retrieve_response_code( $head );
+
+			if ( $code >= 300 && $code < 400 ) {
+				$assets[] = [
+					'name'                 => $name,
+					'browser_download_url' => $url,
+				];
+				break;
+			}
+
+			if ( 404 !== $code ) {
+				return null;
+			}
+		}
+
+		return [
+			'tag_name'     => $tag,
+			'assets'       => $assets,
+			'body'         => '',
+			'published_at' => '',
+			'html_url'     => $base . '/tag/' . rawurlencode( $tag ),
+		];
+	}
+
+	/**
+	 * Ultima release valida guardada (null se nunca houve uma).
+	 *
+	 * @return array|null
+	 */
+	private function last_good_release(): ?array {
+		$saved = get_option( self::LAST_RELEASE_OPTION );
+
+		if ( ! is_array( $saved ) || '' === $this->normalize_version( (string) ( $saved['tag_name'] ?? '' ) ) ) {
+			return null;
+		}
+
+		// Guardada ha mais de 7 dias sem conseguir conferir no GitHub: nao oferece mais nada.
+		if ( time() - (int) ( $saved['mlgp_saved_at'] ?? 0 ) > self::LAST_RELEASE_MAX_AGE ) {
+			return null;
+		}
+
+		return $saved;
+	}
+
+	/**
+	 * User-Agent das consultas ao GitHub.
+	 *
+	 * @return string
+	 */
+	private function user_agent(): string {
+		return 'ML-Gallery-Pro/' . $this->current_version . '; WordPress/' . get_bloginfo( 'version' ) . '; ' . get_bloginfo( 'url' );
+	}
+
+	/**
+	 * Nomes aceitos para o ZIP oficial da versao, em ordem de prioridade.
+	 *
+	 * @param string $version Normalized version.
+	 * @return string[]
+	 */
+	private function expected_asset_names( string $version ): array {
+		return [
+			'ML-Gallery-Pro-v' . str_replace( '.', '_', $version ) . '.zip',
+			'ml-gallery-pro-v' . $version . '.zip',
+			'ml-gallery-pro-' . $version . '.zip',
+		];
 	}
 
 	/**
@@ -316,6 +497,7 @@ class Updater {
 	 */
 	private function find_zip_url( array $release, string $remote_version ): string {
 		$assets = [];
+		$prefix = 'https://github.com/' . $this->github_repo . '/releases/download/';
 
 		foreach ( $release['assets'] ?? [] as $asset ) {
 			$name = (string) ( $asset['name'] ?? '' );
@@ -325,21 +507,20 @@ class Updater {
 				continue;
 			}
 
+			// Pacote so do repositorio de releases configurado.
+			if ( 0 !== strpos( $url, $prefix ) ) {
+				continue;
+			}
+
 			$assets[] = [
-				'name'       => $name,
 				'name_lower' => strtolower( $name ),
 				'url'        => $url,
 			];
 		}
 
-		$version_underscored = str_replace( '.', '_', $remote_version );
-		$expected_names      = [
-			strtolower( 'ML-Gallery-Pro-v' . $version_underscored . '.zip' ),
-			strtolower( 'ml-gallery-pro-v' . $remote_version . '.zip' ),
-			strtolower( 'ml-gallery-pro-' . $remote_version . '.zip' ),
-		];
+		foreach ( $this->expected_asset_names( $remote_version ) as $expected_name ) {
+			$expected_name = strtolower( $expected_name );
 
-		foreach ( $expected_names as $expected_name ) {
 			foreach ( $assets as $asset ) {
 				if ( $asset['name_lower'] === $expected_name ) {
 					return $asset['url'];
