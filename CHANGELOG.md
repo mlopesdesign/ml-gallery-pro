@@ -10,6 +10,11 @@ with this file.
 
 ---
 
+## [0.27.1] - 2026-10-28
+
+### Fixed
+- Corrigido (critico): updater dependia só da API do GitHub. Em hospedagem compartilhada (IP dividido) a API responde 403 por limite de consultas e o plugin saía do transient `update_plugins` (sem coluna de atualização automática, sem detecção de versão nova). Agora: API → página pública `releases/latest` (redireciona para a tag; o asset oficial é conferido por HEAD 302) → última release boa (`mlgp_updater_last_release`). `no_update` é registrado sempre que não há oferta.
+
 ## [0.27.0] - 2026-10-15
 
 ### Changed
