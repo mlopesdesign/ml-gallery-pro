@@ -4,6 +4,8 @@
 	const currentPage = root ? (root.dataset.page || config.page || "galleries") : "galleries";
 	const isAddImagesPage = currentPage === "add-images";
 	const DEFAULT_HEADING_FONT_SIZE = 34;
+	// Imagens por página: padrão e mínimo 500 em todos os modelos.
+	const MIN_PER_PAGE = 500;
 
 	if (!root || !["galleries", "add-images"].includes(currentPage)) {
 		return;
@@ -36,7 +38,7 @@
 				roundedCorners: 0,
 				enableFrontendFilters: 0,
 				paginationEnabled: 1,
-				itemsPerPage: 24,
+				itemsPerPage: MIN_PER_PAGE,
 				showHeading: 0,
 				showDescription: 0,
 				showTitles: 0,
@@ -143,6 +145,12 @@
 		return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
 	}
 
+	function perPageValue(value) {
+		const parsed = Number.parseInt(String(value ?? ""), 10);
+
+		return Math.max(MIN_PER_PAGE, Math.min(5000, Number.isFinite(parsed) ? parsed : MIN_PER_PAGE));
+	}
+
 	function integerValue(value, fallback) {
 		const parsed = Number.parseInt(String(value ?? ""), 10);
 
@@ -171,7 +179,7 @@
 			roundedCorners: toggleValue(settings.rounded_corners, 0),
 			enableFrontendFilters: toggleValue(settings.enable_frontend_filters, 0),
 			paginationEnabled: toggleValue(settings.pagination_enabled, 1),
-			itemsPerPage: integerValue(settings.items_per_page, 24),
+			itemsPerPage: perPageValue(settings.items_per_page),
 			showHeading: toggleValue(settings.show_gallery_heading, 0),
 			showDescription: toggleValue(settings.show_gallery_description, 0),
 			showTitles: toggleValue(settings.show_titles, 0),
@@ -232,7 +240,7 @@
 					roundedCorners: 0,
 					enableFrontendFilters: 0,
 					paginationEnabled: 1,
-					itemsPerPage: 24,
+					itemsPerPage: MIN_PER_PAGE,
 					showHeading: 0,
 					showDescription: 0,
 					showTitles: 0,
@@ -254,7 +262,7 @@
 					roundedCorners: 1,
 					enableFrontendFilters: 0,
 					paginationEnabled: 1,
-					itemsPerPage: 24,
+					itemsPerPage: MIN_PER_PAGE,
 					showTitles: 0,
 					showCaptions: 0,
 					showItemTags: 0,
@@ -274,7 +282,7 @@
 					roundedCorners: 1,
 					enableFrontendFilters: 0,
 					paginationEnabled: 1,
-					itemsPerPage: 18,
+					itemsPerPage: MIN_PER_PAGE,
 					showTitles: 0,
 					showCaptions: 0,
 					showItemTags: 0,
@@ -291,7 +299,7 @@
 					roundedCorners: 1,
 					enableFrontendFilters: 0,
 					paginationEnabled: 1,
-					itemsPerPage: 20,
+					itemsPerPage: MIN_PER_PAGE,
 					showTitles: 0,
 					showCaptions: 0,
 					showItemTags: 0,
@@ -308,7 +316,7 @@
 					roundedCorners: 0,
 					enableFrontendFilters: 0,
 					paginationEnabled: 1,
-					itemsPerPage: 30,
+					itemsPerPage: MIN_PER_PAGE,
 					showTitles: 0,
 					showCaptions: 0,
 					showItemTags: 0,
@@ -496,7 +504,7 @@
 			roundedCorners: toggleValue(gallerySettings.rounded_corners, defaults.roundedCorners),
 			enableFrontendFilters: toggleValue(gallerySettings.enable_frontend_filters, defaults.enableFrontendFilters),
 			paginationEnabled: toggleValue(gallerySettings.pagination_enabled, defaults.paginationEnabled),
-			itemsPerPage: integerValue(gallerySettings.items_per_page, defaults.itemsPerPage),
+			itemsPerPage: perPageValue(gallerySettings.items_per_page ?? defaults.itemsPerPage),
 			showHeading: toggleValue(gallerySettings.show_heading, defaults.showHeading),
 			showDescription: toggleValue(gallerySettings.show_description, defaults.showDescription),
 			showTitles: toggleValue(gallerySettings.show_titles, defaults.showTitles),
@@ -938,7 +946,7 @@
 			rounded_corners: toggleValue(state.editor.form.roundedCorners, 1),
 			enable_frontend_filters: toggleValue(state.editor.form.enableFrontendFilters, 0),
 			pagination_enabled: toggleValue(state.editor.form.paginationEnabled, 1),
-			items_per_page: Math.max(1, Math.min(5000, integerValue(state.editor.form.itemsPerPage, 24))),
+			items_per_page: perPageValue(state.editor.form.itemsPerPage),
 			show_heading: toggleValue(state.editor.form.showHeading, 1),
 			show_description: toggleValue(state.editor.form.showDescription, 1),
 			show_titles: toggleValue(state.editor.form.showTitles, 0),
@@ -1709,7 +1717,7 @@
 									</label>
 									<div class="mlgp-field">
 										<label for="mlgp-editor-items-per-page">Imagens por pagina</label>
-										<input id="mlgp-editor-items-per-page" type="number" min="1" max="5000" value="${Number(state.editor.form.itemsPerPage || 24)}" data-mlgp-gallery-field="itemsPerPage">
+										<input id="mlgp-editor-items-per-page" type="number" min="500" max="5000" value="${perPageValue(state.editor.form.itemsPerPage)}" data-mlgp-gallery-field="itemsPerPage">
 									</div>
 								</div>
 								<label class="mlgp-check">

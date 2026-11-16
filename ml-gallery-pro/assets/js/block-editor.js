@@ -451,7 +451,7 @@
 								options: getToggleOptions(),
 								onChange: function (value) { setAttributes({ pagination: value || "" }); },
 							}),
-							renderOptionalNumberControl(__("Itens por pagina", "ml-gallery-pro"), "perPage", attributes, setAttributes, config.strings.optionalControl, 1, 5000)
+							renderOptionalNumberControl(__("Itens por pagina", "ml-gallery-pro"), "perPage", attributes, setAttributes, config.strings.optionalControl, 500, 5000)
 						)
 						: null,
 

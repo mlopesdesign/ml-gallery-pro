@@ -318,7 +318,9 @@ final class Repository {
 		$id       = isset( $data['id'] ) ? absint( $data['id'] ) : 0;
 		$title    = isset( $data['title'] ) ? sanitize_text_field( wp_unslash( (string) $data['title'] ) ) : '';
 		$slug     = isset( $data['slug'] ) ? sanitize_title( wp_unslash( (string) $data['slug'] ) ) : '';
-		$status   = $this->sanitize_status( $data['status'] ?? 'draft' );
+		// Galeria nova nasce Publicada (Rascunho deixava a galeria fora do carrossel); edição sem status mantém o atual.
+		$existing = $id ? $this->get_gallery( $id ) : null;
+		$status   = $this->sanitize_status( $data['status'] ?? ( $existing['status'] ?? 'publish' ) );
 		$settings = isset( $data['settings'] ) && is_array( $data['settings'] ) ? $data['settings'] : [];
 
 		if ( '' === $title ) {
@@ -1361,7 +1363,9 @@ final class Repository {
 		$id       = isset( $data['id'] ) ? absint( $data['id'] ) : 0;
 		$title    = isset( $data['title'] ) ? sanitize_text_field( wp_unslash( (string) $data['title'] ) ) : '';
 		$slug     = isset( $data['slug'] ) ? sanitize_title( wp_unslash( (string) $data['slug'] ) ) : '';
-		$status   = $this->sanitize_status( $data['status'] ?? 'draft' );
+		// Álbum novo nasce Publicado; edição sem status mantém o atual.
+		$existing = $id ? $this->get_album( $id ) : null;
+		$status   = $this->sanitize_status( $data['status'] ?? ( $existing['status'] ?? 'publish' ) );
 		$settings = isset( $data['settings'] ) && is_array( $data['settings'] ) ? $data['settings'] : [];
 
 		if ( '' === $title ) {
@@ -1924,7 +1928,7 @@ final class Repository {
 			'album_gap_background_opacity' => $this->sanitize_integer( $input['album_gap_background_opacity'] ?? $current['album_gap_background_opacity'] ?? $defaults['album_gap_background_opacity'], 0, 100 ),
 			'album_card_radius'       => $this->sanitize_integer( $input['album_card_radius'] ?? $current['album_card_radius'] ?? $defaults['album_card_radius'], 0, 80 ),
 			'album_pagination_enabled' => $this->resolve_setting_flag( $input, 'album_pagination_enabled', $current['album_pagination_enabled'] ?? $defaults['album_pagination_enabled'] ?? 1 ),
-			'album_items_per_page'    => $this->sanitize_integer( $input['album_items_per_page'] ?? $current['album_items_per_page'] ?? $defaults['album_items_per_page'], 1, 5000 ),
+			'album_items_per_page'    => $this->sanitize_integer( $input['album_items_per_page'] ?? $current['album_items_per_page'] ?? $defaults['album_items_per_page'], MLGP_MIN_PER_PAGE, 5000 ),
 			'album_show_titles'       => $this->resolve_setting_flag( $input, 'album_show_titles', $current['album_show_titles'] ?? $defaults['album_show_titles'] ?? 1 ),
 			'album_show_captions'     => $this->resolve_setting_flag( $input, 'album_show_captions', $current['album_show_captions'] ?? $defaults['album_show_captions'] ?? 0 ),
 			'album_show_heading'      => $this->resolve_setting_flag( $input, 'album_show_heading', $current['album_show_heading'] ?? $defaults['album_show_heading'] ?? 0 ),
@@ -1948,7 +1952,7 @@ final class Repository {
 				'top'
 			),
 			'enable_frontend_filters' => $this->resolve_setting_flag( $input, 'enable_frontend_filters', $current['enable_frontend_filters'] ?? 0 ),
-			'items_per_page'        => $this->sanitize_integer( $input['items_per_page'] ?? $current['items_per_page'], 1, 5000 ),
+			'items_per_page'        => $this->sanitize_integer( $input['items_per_page'] ?? $current['items_per_page'], MLGP_MIN_PER_PAGE, 5000 ),
 			'pagination_enabled'    => $this->resolve_setting_flag( $input, 'pagination_enabled', $current['pagination_enabled'] ?? 0 ),
 			'show_titles'          => $this->resolve_setting_flag( $input, 'show_titles', $current['show_titles'] ?? 0 ),
 			'show_captions'        => $this->resolve_setting_flag( $input, 'show_captions', $current['show_captions'] ?? 0 ),
@@ -2036,7 +2040,7 @@ final class Repository {
 			'card_radius'          => (int) ( $settings['album_card_radius'] ?? 0 ),
 			'rounded_corners'      => ! empty( $settings['album_card_radius'] ) ? 1 : 0,
 			'pagination_enabled'   => ! empty( $settings['album_pagination_enabled'] ) ? 1 : 0,
-			'items_per_page'       => (int) ( $settings['album_items_per_page'] ?? 18 ),
+			'items_per_page'       => max( MLGP_MIN_PER_PAGE, (int) ( $settings['album_items_per_page'] ?? MLGP_MIN_PER_PAGE ) ),
 			'show_heading'         => ! empty( $settings['album_show_heading'] ) ? 1 : 0,
 			'show_description'     => ! empty( $settings['album_show_description'] ) ? 1 : 0,
 			'album_item_title_font_size' => (int) ( $settings['album_item_title_font_size'] ?? 18 ),
@@ -2111,7 +2115,7 @@ final class Repository {
 				'gap_background_opacity' => 100,
 				'rounded_corners' => 0,
 				'pagination_enabled' => 1,
-				'items_per_page' => 24,
+				'items_per_page' => MLGP_MIN_PER_PAGE,
 				'show_titles' => 0,
 				'show_captions' => 0,
 				'show_item_tags' => 0,
@@ -2149,7 +2153,7 @@ final class Repository {
 			'rounded_corners' => ! empty( $settings['rounded_corners'] ) ? 1 : 0,
 			'enable_frontend_filters' => ! empty( $settings['enable_frontend_filters'] ) ? 1 : 0,
 			'pagination_enabled' => ! empty( $settings['pagination_enabled'] ) ? 1 : 0,
-			'items_per_page' => (int) ( $settings['items_per_page'] ?? 24 ),
+			'items_per_page' => max( MLGP_MIN_PER_PAGE, (int) ( $settings['items_per_page'] ?? MLGP_MIN_PER_PAGE ) ),
 			'show_heading' => ! empty( $settings['show_gallery_heading'] ) ? 1 : 0,
 			'show_description' => ! empty( $settings['show_gallery_description'] ) ? 1 : 0,
 			'show_titles' => ! empty( $settings['show_titles'] ) ? 1 : 0,
