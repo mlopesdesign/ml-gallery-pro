@@ -3,7 +3,7 @@ Contributors: mlopesdesign
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.27.1
+Stable tag: 0.28.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,10 @@ ou:
 `[ml_gallery_pro album="1"]`
 
 == Changelog ==
+
+= 0.28.0 =
+* Corrigido: galerias e álbuns abriam com 20 imagens por página mesmo com 500 ou 1000 nas Configurações, porque o modelo escolhido ao criar a galeria gravava um número fixo (20, 24, 18 ou 30) na própria galeria, e esse número vencia o das Configurações. Agora o padrão é 500 em todos os modelos e nas Configurações, e 500 é o mínimo: galerias e álbuns já salvos com menos passam a mostrar 500 por página sozinhos (valores maiores, até 5000, continuam valendo). Vale para galeria, álbum, shortcode e bloco.
+* Galeria e álbum novos nascem como Publicado (antes, Rascunho: esquecer de trocar deixava a galeria fora do carrossel). Editar sem informar o status mantém o status atual.
 
 = 0.27.1 =
 * Corrigido (critico): em hospedagem compartilhada a consulta ao GitHub era recusada (limite da API por IP) e o plugin sumia da lista de atualizações do WordPress: sem coluna de atualização automática e sem aviso de versão nova. Agora, se a API recusar, a versão é lida pela página pública da release; se o GitHub não responder, vale a última release conhecida. O plugin fica sempre registrado no WordPress.

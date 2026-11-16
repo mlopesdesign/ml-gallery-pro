@@ -40,7 +40,7 @@ if (root || config.isPostEditor) {
 			coverLockRatio: Number(source.album_cover_lock_ratio ?? source.coverLockRatio ?? globals.album_cover_lock_ratio ?? 1),
 			roundedCorners: Number(source.rounded_corners ?? source.roundedCorners ?? (Number(globals.album_card_radius ?? 0) > 0 ? 1 : 0)),
 			paginationEnabled: Number(source.pagination_enabled ?? source.paginationEnabled ?? globals.album_pagination_enabled ?? 1),
-			itemsPerPage: Number(source.items_per_page ?? source.itemsPerPage ?? globals.album_items_per_page ?? 18),
+			itemsPerPage: perPageValue(source.items_per_page ?? source.itemsPerPage ?? globals.album_items_per_page),
 			showHeading: Number(source.show_heading ?? source.showHeading ?? globals.album_show_heading ?? 0),
 			showDescription: Number(source.show_description ?? source.showDescription ?? globals.album_show_description ?? 0),
 			showTitles: Number(source.show_titles ?? source.showTitles ?? globals.album_show_titles ?? 1),
@@ -73,7 +73,7 @@ if (root || config.isPostEditor) {
 			album_cover_lock_ratio: Number(form.coverLockRatio || 0) ? 1 : 0,
 			rounded_corners: Number(form.roundedCorners || 0) ? 1 : 0,
 			pagination_enabled: Number(form.paginationEnabled || 0) ? 1 : 0,
-			items_per_page: Number(form.itemsPerPage || 24),
+			items_per_page: perPageValue(form.itemsPerPage),
 			show_heading: Number(form.showHeading || 0) ? 1 : 0,
 			show_description: Number(form.showDescription || 0) ? 1 : 0,
 			show_titles: Number(form.showTitles || 0) ? 1 : 0,
@@ -92,7 +92,7 @@ if (root || config.isPostEditor) {
 			form: {
 				title: "",
 				slug: "",
-				status: "draft",
+				status: "publish",
 				description: "",
 				...defaultAlbumDisplaySettings(),
 			},
@@ -564,7 +564,7 @@ if (root || config.isPostEditor) {
 		return {
 			title: album && album.title ? String(album.title) : "",
 			slug: album && album.slug ? String(album.slug) : "",
-			status: album && album.status ? String(album.status) : "draft",
+			status: album && album.status ? String(album.status) : "publish",
 			description: album && album.description ? String(album.description) : "",
 			displayType: String(album && album.display_type ? album.display_type : displaySettings.displayType),
 			...displaySettings,
@@ -677,6 +677,13 @@ if (root || config.isPostEditor) {
 				<span>${escapeHtml(label)}</span>
 			</span>
 		`;
+	}
+
+	// Imagens/itens por página: padrão e mínimo 500 em todos os modelos.
+	function perPageValue(value) {
+		const parsed = Number.parseInt(String(value ?? ""), 10);
+
+		return Math.max(500, Math.min(5000, Number.isFinite(parsed) ? parsed : 500));
 	}
 
 	function normalizeGalleryStatus(status) {
@@ -1133,7 +1140,7 @@ if (root || config.isPostEditor) {
 							<label for="mlgp-gallery-status">Status</label>
 							<select id="mlgp-gallery-status" name="status">
 								<option value="draft">Rascunho</option>
-								<option value="publish">Publicado</option>
+								<option value="publish" selected>Publicado</option>
 								<option value="private">Privado</option>
 							</select>
 						</div>
@@ -1496,7 +1503,7 @@ if (root || config.isPostEditor) {
 									</div>
 									<div class="mlgp-field">
 										<label for="mlgp-editor-album-items-page">Itens por pagina</label>
-										<input id="mlgp-editor-album-items-page" type="number" min="1" max="5000" value="${Number(form.itemsPerPage || 24)}" data-mlgp-album-field="itemsPerPage">
+										<input id="mlgp-editor-album-items-page" type="number" min="500" max="5000" value="${perPageValue(form.itemsPerPage)}" data-mlgp-album-field="itemsPerPage">
 									</div>
 									<div class="mlgp-field">
 										<label for="mlgp-editor-album-cover-width">Largura da capa de exposicao</label>
@@ -1771,7 +1778,7 @@ if (root || config.isPostEditor) {
 					</div>
 					<div class="mlgp-field">
 						<label for="mlgp-items-per-page">Itens por página</label>
-						<input id="mlgp-items-per-page" type="number" min="1" max="5000" name="items_per_page" value="${Number(settings.items_per_page || 24)}">
+						<input id="mlgp-items-per-page" type="number" min="500" max="5000" name="items_per_page" value="${perPageValue(settings.items_per_page)}">
 					</div>
 					<div class="mlgp-field">
 						<label for="mlgp-image-quality">Qualidade das imagens</label>
@@ -2046,7 +2053,7 @@ if (root || config.isPostEditor) {
 					</div>
 					<div class="mlgp-field">
 						<label for="mlgp-album-items-per-page">Itens por página</label>
-						<input id="mlgp-album-items-per-page" type="number" min="1" max="5000" name="album_items_per_page" value="${Number(settings.album_items_per_page || 18)}">
+						<input id="mlgp-album-items-per-page" type="number" min="500" max="5000" name="album_items_per_page" value="${perPageValue(settings.album_items_per_page)}">
 					</div>
 					<div class="mlgp-field">
 						<label for="mlgp-album-item-title-font-size">Tamanho do título do card do álbum (px)</label>
@@ -2572,7 +2579,7 @@ if (root || config.isPostEditor) {
 						</div>
 						<div class="mlgp-field">
 							<label for="mlgp-items-per-page">Itens por pagina</label>
-							<input id="mlgp-items-per-page" type="number" min="1" max="5000" name="items_per_page" value="${Number(settings.items_per_page || 24)}">
+							<input id="mlgp-items-per-page" type="number" min="500" max="5000" name="items_per_page" value="${perPageValue(settings.items_per_page)}">
 						</div>
 						<div class="mlgp-field">
 							<label for="mlgp-image-quality">Qualidade da imagem</label>
@@ -3150,7 +3157,7 @@ if (root || config.isPostEditor) {
 			title: state.albumEditor.form.title || "",
 			slug: state.albumEditor.form.slug || "",
 			description: state.albumEditor.form.description || "",
-			status: state.albumEditor.form.status || "draft",
+			status: state.albumEditor.form.status || "publish",
 			display_type: state.albumEditor.form.displayType || "grid",
 			settings: JSON.stringify(serializeAlbumSettings(state.albumEditor.form)),
 		});
@@ -3484,7 +3491,7 @@ if (root || config.isPostEditor) {
 				...defaultAlbumDisplaySettings({}, state.settings || config.settings || {}),
 				title: form.elements.title ? form.elements.title.value : "",
 				slug: form.elements.slug ? form.elements.slug.value : "",
-				status: form.elements.status ? form.elements.status.value : "draft",
+				status: form.elements.status ? form.elements.status.value : "publish",
 				description: form.elements.description ? form.elements.description.value : "",
 			};
 

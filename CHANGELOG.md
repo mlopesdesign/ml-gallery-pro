@@ -10,6 +10,14 @@ with this file.
 
 ---
 
+## [0.28.0] - 2026-11-16
+
+### Fixed
+- Galerias e álbuns abriam com 20 imagens por página mesmo com 500/1000 nas Configurações: o modelo escolhido ao criar a galeria gravava um número fixo (20/24/18/30) na própria galeria, que vencia o global. Padrão agora é 500 em todos os modelos e nas Configurações, e 500 é o mínimo (constante `MLGP_MIN_PER_PAGE`): galerias/álbuns já salvos com menos passam a mostrar 500 sem precisar editar; valores até 5000 continuam valendo. Galeria, álbum, shortcode, bloco e painel.
+
+### Changed
+- Galeria e álbum novos nascem como Publicado (antes Rascunho). Editar sem status mantém o atual.
+
 ## [0.27.1] - 2026-10-28
 
 ### Fixed

@@ -286,7 +286,7 @@ final class GalleryBlock {
 			'gap'                  => $this->sanitize_optional_integer( $attributes['gap'] ?? '', 0, 60 ),
 			'row_height'           => $this->sanitize_optional_integer( $attributes['rowHeight'] ?? '', 120, 520 ),
 			'pagination'           => $this->sanitize_optional_toggle( $attributes['pagination'] ?? '' ),
-			'per_page'             => $this->sanitize_optional_integer( $attributes['perPage'] ?? '', 1, 5000 ),
+			'per_page'             => $this->sanitize_optional_integer( $attributes['perPage'] ?? '', MLGP_MIN_PER_PAGE, 5000 ),
 			'show_titles'          => $this->sanitize_optional_toggle( $attributes['showTitles'] ?? '' ),
 			'show_captions'        => $this->sanitize_optional_toggle( $attributes['showCaptions'] ?? '' ),
 			'rounded_corners'      => $this->sanitize_optional_toggle( $attributes['roundedCorners'] ?? '' ),
